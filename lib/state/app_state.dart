@@ -30,6 +30,7 @@ import 'package:yet_another_luci_app/services/interfaces/auth_service_interface.
 import 'package:yet_another_luci_app/services/interfaces/api_service_interface.dart';
 import 'package:yet_another_luci_app/services/interfaces/ssh_service_interface.dart';
 import 'package:yet_another_luci_app/services/api_service.dart';
+import 'package:yet_another_luci_app/services/operation_queue.dart';
 import 'package:yet_another_luci_app/services/service_factory.dart';
 import 'package:yet_another_luci_app/utils/http_client_manager.dart';
 import 'package:yet_another_luci_app/utils/logger.dart';
@@ -37,12 +38,18 @@ import 'package:yet_another_luci_app/utils/os_platform_integration.dart';
 import 'package:yet_another_luci_app/modules/package_manager/models/package_info.dart';
 import 'package:yet_another_luci_app/models/router_capabilities.dart';
 import 'package:yet_another_luci_app/models/network_topology.dart';
+import 'package:yet_another_luci_app/models/network_access_policy.dart';
 import 'package:yet_another_luci_app/modules/firewall_security/models/firewall_info.dart';
 import 'package:yet_another_luci_app/modules/services_system/models/ddns_info.dart';
 import 'package:yet_another_luci_app/modules/sqm/models/sqm_queue.dart';
 import 'package:yet_another_luci_app/modules/wireless_management/models/wireless_info.dart';
 import 'package:yet_another_luci_app/modules/dhcp_dns/models/dhcp_dns_info.dart';
 import 'package:yet_another_luci_app/modules/diagnostics/models/flush_dns_result.dart';
+import 'package:yet_another_luci_app/utils/self_device_guard.dart';
+import 'package:yet_another_luci_app/modules/firewall_security/services/firewall_policy_translator.dart';
+import 'package:yet_another_luci_app/services/client_policy_schedule_service.dart';
+import 'package:yet_another_luci_app/services/mock_api_service.dart';
+import 'package:yet_another_luci_app/utils/client_naming_helper.dart';
 
 enum RouterConnectionStatus { connected, reconnecting, disconnected }
 
@@ -66,6 +73,12 @@ class AppState extends ChangeNotifier {
 
   @visibleForTesting
   void setSshServiceForTesting(ISshService service) => _sshService = service;
+
+  @visibleForTesting
+  void setApiServiceForTesting(IApiService service) => _apiService = service;
+
+  @visibleForTesting
+  void setAuthServiceForTesting(IAuthService service) => _authService = service;
 
   @visibleForTesting
   void setDashboardDataForTesting(Map<String, dynamic>? data) {
@@ -100,6 +113,21 @@ class AppState extends ChangeNotifier {
   @visibleForTesting
   void notifyRouterBackOnlineForTesting({required bool success}) {
     _notifyRouterBackOnline(success: success);
+  }
+
+  int? _freeDiskSpaceOverrideForTesting;
+  bool _hasFreeDiskSpaceOverride = false;
+
+  @visibleForTesting
+  void setFreeDiskSpaceForTesting(int? bytes) {
+    _hasFreeDiskSpaceOverride = true;
+    _freeDiskSpaceOverrideForTesting = bytes;
+  }
+
+  @visibleForTesting
+  void clearFreeDiskSpaceForTesting() {
+    _hasFreeDiskSpaceOverride = false;
+    _freeDiskSpaceOverrideForTesting = null;
   }
 
   ThroughputService? _throughputService;
@@ -248,6 +276,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  final Completer<void> _initCompleter = Completer<void>();
+  bool get isInitialized => _initCompleter.isCompleted;
+  Future<void> get initializationFuture =>
+      _initCompleter.isCompleted ? Future<void>.value() : _initCompleter.future;
+
   AppState._() {
     _initialize();
   }
@@ -257,28 +290,43 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
-    // Configure default storage service first
-    ServiceContainer.configure(reviewerMode: false);
-    _secureStorageService = ServiceContainer.instance.factory
-        .createSecureStorageService();
-    _initializeServices();
+    try {
+      // Configure default storage service first
+      ServiceContainer.configure(reviewerMode: false);
+      _secureStorageService = ServiceContainer.instance.factory
+          .createSecureStorageService();
+      _initializeServices();
 
-    final storedReviewerMode = await _secureStorageService.readValue(
-      AppConfig.reviewerModeKey,
-    );
-    if (storedReviewerMode == 'true') {
-      await _sessionController?.setReviewerMode(true);
+      final storedReviewerMode = await _secureStorageService.readValue(
+        AppConfig.reviewerModeKey,
+      );
+      if (storedReviewerMode == 'true') {
+        await _sessionController?.setReviewerMode(true);
+      }
+
+      // Concurrently hydrate independent startup state without firing fragmented notifications
+      await Future.wait([
+        _sessionController?.loadThemeMode(notify: false) ?? Future.value(),
+        _sessionController?.loadDynamicTheme(notify: false) ?? Future.value(),
+        _sessionController?.loadLocale(notify: false) ?? Future.value(),
+        loadRouters(notify: false),
+        _sessionController?.loadClientsViewMode() ?? Future.value(),
+      ]);
+
+      await _sessionController
+          ?.migrateGlobalDashboardPreferencesIfNeeded(); // Proactively migrate legacy prefs
+      await loadDashboardPreferences(); // Load prefs scoped to selected router
+      await _loadPendingAccessControlState();
+
+      // Dispatch single consolidated notification for entire startup hydration
+      notifyListeners();
+    } catch (e, stack) {
+      Logger.exception('AppState initialization failed', e, stack);
+    } finally {
+      if (!_initCompleter.isCompleted) {
+        _initCompleter.complete();
+      }
     }
-
-    await _sessionController?.loadThemeMode();
-    await _sessionController?.loadDynamicTheme();
-    await _sessionController?.loadLocale();
-    await loadRouters(); // Load routers on app start (sets selectedRouter)
-    await _sessionController
-        ?.migrateGlobalDashboardPreferencesIfNeeded(); // Proactively migrate legacy prefs
-    await _sessionController?.loadClientsViewMode();
-    await loadDashboardPreferences(); // Load prefs scoped to selected router
-    await _loadPendingAccessControlState();
   }
 
   void _initializeServices() {
@@ -310,7 +358,18 @@ class AppState extends ChangeNotifier {
       setPublicIps: (v4, v6) {
         _sessionController?.setPublicIps(v4, v6);
       },
+      connectionStatusRef: () {
+        switch (_connectionStatus) {
+          case RouterConnectionStatus.connected:
+            return DashboardConnectionStatus.connected;
+          case RouterConnectionStatus.reconnecting:
+            return DashboardConnectionStatus.reconnecting;
+          case RouterConnectionStatus.disconnected:
+            return DashboardConnectionStatus.disconnected;
+        }
+      },
       setConnectionStatus: (status) {
+        final prev = _connectionStatus;
         switch (status) {
           case DashboardConnectionStatus.connected:
             _connectionStatus = RouterConnectionStatus.connected;
@@ -321,6 +380,9 @@ class AppState extends ChangeNotifier {
           case DashboardConnectionStatus.disconnected:
             _connectionStatus = RouterConnectionStatus.disconnected;
             break;
+        }
+        if (prev != _connectionStatus) {
+          notifyListeners();
         }
       },
       startThroughputTimer: _startThroughputTimer,
@@ -446,6 +508,100 @@ class AppState extends ChangeNotifier {
   bool get isAuthenticated => sysauth != null && sysauth!.isNotEmpty;
   bool get hasActiveSession => isAuthenticated || reviewerModeEnabled;
   IApiService? get apiService => _apiService;
+  RouterScopedOperationQueue get operationQueue =>
+      RouterScopedOperationQueue.instance;
+
+  /// Apply UCI changes with rollback safety, serialized via the router-scoped operation queue.
+  Future<bool> uciApply({
+    String? ipAddress,
+    String? sysauth,
+    bool? useHttps,
+    bool rollback = true,
+    int timeout = 30,
+  }) async {
+    final router = selectedRouter;
+    final targetIp = ipAddress ?? router?.ipAddress;
+    final targetSysauth = sysauth ?? this.sysauth ?? '';
+    final targetHttps = useHttps ?? router?.useHttps ?? false;
+
+    if (targetIp == null || targetIp.isEmpty) {
+      Logger.error('uciApply failed: no target IP address');
+      return false;
+    }
+
+    final routerId = router?.id ?? targetIp;
+
+    return operationQueue.runLocked(
+      routerId: routerId,
+      domain: 'uci',
+      timeout: Duration(seconds: timeout + 15),
+      action: () async {
+        if (_apiService == null) return false;
+        return await _apiService!.uciApply(
+          targetIp,
+          targetSysauth,
+          targetHttps,
+          rollback: rollback,
+          timeout: timeout,
+        );
+      },
+    );
+  }
+
+  /// Confirm UCI changes to prevent rollback, serialized via the router-scoped operation queue.
+  Future<bool> uciConfirm({
+    String? ipAddress,
+    String? sysauth,
+    bool? useHttps,
+  }) async {
+    final router = selectedRouter;
+    final targetIp = ipAddress ?? router?.ipAddress;
+    final targetSysauth = sysauth ?? this.sysauth ?? '';
+    final targetHttps = useHttps ?? router?.useHttps ?? false;
+
+    if (targetIp == null || targetIp.isEmpty) {
+      Logger.error('uciConfirm failed: no target IP address');
+      return false;
+    }
+
+    final routerId = router?.id ?? targetIp;
+
+    return operationQueue.runLocked(
+      routerId: routerId,
+      domain: 'uci',
+      action: () async {
+        if (_apiService == null) return false;
+        return await _apiService!.uciConfirm(
+          targetIp,
+          targetSysauth,
+          targetHttps,
+        );
+      },
+    );
+  }
+
+  /// Changes router password using the 10-state transactional flow in SessionController.
+  Future<ChangePasswordResult> changeRouterPassword({
+    required String currentPassword,
+    required String newPassword,
+    void Function(ChangePasswordStatus status)? onProgress,
+  }) async {
+    if (_sessionController == null) {
+      return const ChangePasswordResult.failed('Session controller unavailable');
+    }
+    return await _sessionController!.changeRouterPassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      onProgress: onProgress,
+    );
+  }
+
+  /// Retries saving new router credentials to storage after storage write failure.
+  Future<bool> retrySaveRouterPassword(model.Router router) async {
+    if (_sessionController == null) return false;
+    return await _sessionController!.retrySaveRouterPassword(router);
+  }
+
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -509,7 +665,8 @@ class AppState extends ChangeNotifier {
         0.0;
   }
 
-  Future<void> loadRouters() => _sessionController!.loadRouters();
+  Future<void> loadRouters({bool notify = true}) =>
+      _sessionController!.loadRouters(notify: notify);
 
   Future<void> addRouter(model.Router router) =>
       _sessionController!.addRouter(router);
@@ -527,8 +684,8 @@ class AppState extends ChangeNotifier {
     await _sessionController!.selectRouter(id, context: context);
   }
 
-  Future<void> updateRouter(model.Router router) =>
-      _sessionController!.updateRouter(router);
+  Future<void> updateRouter(model.Router router, {String? oldId}) =>
+      _sessionController!.updateRouter(router, oldId: oldId);
 
   Future<void> updateRouterName(String id, String? name) =>
       _sessionController!.updateRouterName(id, name);
@@ -649,7 +806,13 @@ class AppState extends ChangeNotifier {
           if (model == NetworkModel.dsa) {
             return DsaTopologyParser.parse(map, null);
           } else {
-            return SwconfigTopologyParser.parse(map, null);
+            return SwconfigTopologyParser.parse(
+              map,
+              null,
+              boardJson:
+                  dashboardData?['boardJson'] as Map<String, dynamic>? ??
+                  capabilities?.boardJson,
+            );
           }
         }
         return NetworkTopology.unavailable(
@@ -681,6 +844,19 @@ class AppState extends ChangeNotifier {
     }
     final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
     final backend = capabilities?.firewallBackend ?? FirewallBackend.fw4;
+    final routerId = _routerService?.selectedRouter?.id;
+
+    // Discover management ports in background to keep safety guard cache fresh
+    unawaited(
+      _apiService!
+          .discoverManagementPorts(ip, _authService!.sysauth!, useHttps)
+          .then((ports) {
+            if (routerId != null) {
+              SelfDeviceGuard.setDiscoveredManagementPorts(routerId, ports);
+            }
+          })
+          .catchError((_) {}),
+    );
 
     try {
       final rawRpc = await _apiService!.call(
@@ -784,8 +960,12 @@ class AppState extends ChangeNotifier {
   );
 
   /// Query free disk space in bytes for package operations (/overlay or /)
-  Future<int?> getFreeDiskSpace() =>
-      _packageController?.getFreeDiskSpace() ?? Future.value(null);
+  Future<int?> getFreeDiskSpace() {
+    if (_hasFreeDiskSpaceOverride) {
+      return Future.value(_freeDiskSpaceOverrideForTesting);
+    }
+    return _packageController?.getFreeDiskSpace() ?? Future.value(null);
+  }
 
   /// Update package lists from feeds (/usr/libexec/package-manager-call update)
   Future<RpcResult<String>> updatePackageLists() =>
@@ -1561,14 +1741,37 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Set<String> get pausedInternetMacs =>
-      _networkActionsController?.pausedInternetMacs ?? {};
+  Set<String> get pausedInternetMacs {
+    final result = <String>{
+      ...(_networkActionsController?.pausedInternetMacs ?? {}),
+    };
+    final rawFirewall = dashboardData?['uciFirewallConfig'];
+    if (rawFirewall is Map) {
+      final overview = FirewallOverview.fromUciData(
+        Map<String, dynamic>.from(rawFirewall),
+        backend: capabilities?.firewallBackend ?? FirewallBackend.fw4,
+        isReviewerMode: reviewerModeEnabled,
+      );
+      for (final rule in overview.customRules) {
+        if (!rule.enabled) continue;
+        final target = rule.target.toUpperCase();
+        if (target != 'DROP' && target != 'REJECT' && target != 'STOP') continue;
+        for (final m in rule.srcMac) {
+          final norm = ClientNamingHelper.normalizeMac(m);
+          if (norm.isNotEmpty) {
+            result.add(norm);
+          }
+        }
+      }
+    }
+    return result;
+  }
 
   Set<String> get bannedWirelessMacs =>
       _networkActionsController?.bannedWirelessMacs ?? {};
 
   bool isInternetPaused(String mac) =>
-      _networkActionsController?.isInternetPaused(mac) ?? false;
+      getDeviceNetworkAccessPolicy(mac).isEffectivelyBlocked;
 
   bool isWirelessBanned(String mac) =>
       _networkActionsController?.isWirelessBanned(mac) ?? false;
@@ -1592,11 +1795,13 @@ class AppState extends ChangeNotifier {
     String macAddress, {
     required bool pause,
     BuildContext? context,
-  }) => _networkActionsController!.pauseClientInternet(
-    macAddress,
-    pause: pause,
-    context: context,
-  );
+  }) {
+    final normMac = ClientNamingHelper.normalizeMac(macAddress);
+    final policy = pause
+        ? NetworkAccessPolicy.blocked(normMac)
+        : NetworkAccessPolicy.unrestricted(normMac);
+    return setDeviceNetworkAccessPolicy(policy: policy, context: context);
+  }
 
   Future<bool> applyParentalProfileDns({
     required String profileId,
@@ -1859,6 +2064,95 @@ class AppState extends ChangeNotifier {
     return data;
   }
 
+  void _safeSetMapEntry(Map target, dynamic key, dynamic value) {
+    try {
+      target[key] = value;
+    } catch (_) {
+      try {
+        if (value is bool) {
+          target[key] = value ? '1' : '0';
+        } else if (value is String) {
+          if (value == '1') {
+            target[key] = true;
+          } else if (value == '0') {
+            target[key] = false;
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  void _mutateWirelessRadioInMemory(String radioName, bool enable) {
+    if (dashboardData != null) {
+      if (dashboardData!['uciWirelessConfig'] is Map) {
+        final uci = dashboardData!['uciWirelessConfig'] as Map;
+        final uciValues =
+            (uci['values'] is Map) ? (uci['values'] as Map) : uci;
+        if (uciValues[radioName] is Map) {
+          _safeSetMapEntry(
+            uciValues[radioName] as Map,
+            'disabled',
+            enable ? '0' : '1',
+          );
+        } else {
+          uciValues[radioName] = {'disabled': enable ? '0' : '1'};
+        }
+      }
+      if (dashboardData!['wireless'] is Map) {
+        final wMap = dashboardData!['wireless'] as Map;
+        if (wMap[radioName] is Map) {
+          final r = wMap[radioName] as Map;
+          _safeSetMapEntry(r, 'up', enable);
+          _safeSetMapEntry(r, 'disabled', !enable);
+          if (r['config'] is Map) {
+            _safeSetMapEntry(r['config'] as Map, 'disabled', !enable);
+          }
+        }
+      }
+    }
+  }
+
+  void _mutateSsidInMemory(String ifaceSection, bool enabled) {
+    if (dashboardData != null) {
+      if (dashboardData!['uciWirelessConfig'] is Map) {
+        final uci = dashboardData!['uciWirelessConfig'] as Map;
+        final uciValues =
+            (uci['values'] is Map) ? (uci['values'] as Map) : uci;
+        if (uciValues[ifaceSection] is Map) {
+          _safeSetMapEntry(
+            uciValues[ifaceSection] as Map,
+            'disabled',
+            enabled ? '0' : '1',
+          );
+        } else {
+          uciValues[ifaceSection] = {'disabled': enabled ? '0' : '1'};
+        }
+      }
+      if (dashboardData!['wireless'] is Map) {
+        final wMap = dashboardData!['wireless'] as Map;
+        for (final r in wMap.values) {
+          if (r is Map && r['interfaces'] is List) {
+            for (final iface in (r['interfaces'] as List)) {
+              if (iface is Map &&
+                  (iface['section'] == ifaceSection ||
+                      iface['ifname'] == ifaceSection)) {
+                _safeSetMapEntry(iface, 'disabled', !enabled);
+                _safeSetMapEntry(iface, 'up', enabled);
+                if (iface['config'] is Map) {
+                  _safeSetMapEntry(
+                    iface['config'] as Map,
+                    'disabled',
+                    enabled ? '0' : '1',
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   Future<bool> setSsidEnabled(
     String ifaceSection,
     bool enabled, {
@@ -1866,7 +2160,9 @@ class AppState extends ChangeNotifier {
   }) async {
     if (reviewerModeEnabled) {
       await Future.delayed(const Duration(milliseconds: 300));
-      await fetchDashboardData();
+      _mutateSsidInMemory(ifaceSection, enabled);
+      invalidateInFlightDashboardFetches();
+      notifyListeners();
       return true;
     }
     if (_authService?.sysauth == null || _authService?.ipAddress == null) {
@@ -1881,6 +2177,41 @@ class AppState extends ChangeNotifier {
       context: context,
     );
     if (res) {
+      _mutateSsidInMemory(ifaceSection, enabled);
+      invalidateInFlightDashboardFetches();
+      notifyListeners();
+      unawaited(fetchDashboardData());
+    }
+    return res;
+  }
+
+  Future<bool> toggleWirelessRadio(
+    String radioName,
+    bool enable, {
+    BuildContext? context,
+  }) async {
+    if (reviewerModeEnabled) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      _mutateWirelessRadioInMemory(radioName, enable);
+      invalidateInFlightDashboardFetches();
+      notifyListeners();
+      return true;
+    }
+    if (_authService?.sysauth == null || _authService?.ipAddress == null) {
+      return false;
+    }
+    final res = await _apiService!.toggleWirelessRadio(
+      _authService!.ipAddress!,
+      _authService!.sysauth!,
+      _authService!.useHttps,
+      radioName: radioName,
+      enabled: enable,
+      context: context,
+    );
+    if (res) {
+      _mutateWirelessRadioInMemory(radioName, enable);
+      invalidateInFlightDashboardFetches();
+      notifyListeners();
       unawaited(fetchDashboardData());
     }
     return res;
@@ -2184,6 +2515,11 @@ class AppState extends ChangeNotifier {
     );
 
     if (success) {
+      if (dashboardData != null && dashboardData!['ddns'] is Map) {
+        dashboardData!['ddns'][instance.name] = instance.toUciParams()
+          ..['.type'] = 'service';
+      }
+      notifyListeners();
       unawaited(fetchDashboardData());
     }
 
@@ -2215,6 +2551,10 @@ class AppState extends ChangeNotifier {
     );
 
     if (success) {
+      if (dashboardData != null && dashboardData!['ddns'] is Map) {
+        (dashboardData!['ddns'] as Map).remove(instanceName);
+      }
+      notifyListeners();
       unawaited(fetchDashboardData());
     }
 
@@ -2276,10 +2616,21 @@ class AppState extends ChangeNotifier {
     );
 
     if (success) {
+      invalidateInFlightDashboardFetches();
+      if (dashboardData != null) {
+        dashboardData!['ddns'] ??= {};
+        dashboardData!['ddns']['global'] = {'is_enabled': enable ? '1' : '0'};
+      }
+      notifyListeners();
       unawaited(fetchDashboardData());
     }
 
     return success;
+  }
+
+  /// Invalidates any in-flight background dashboard fetch to prevent stale overrides.
+  void invalidateInFlightDashboardFetches() {
+    _dashboardController?.invalidateInFlightFetches();
   }
 
   Future<bool> saveSqmQueue(SqmQueue queue, {BuildContext? context}) async {
@@ -2412,6 +2763,332 @@ class AppState extends ChangeNotifier {
     sectionKey: sectionKey,
     context: context,
   );
+
+  Future<void> refreshFirewallState() async {
+    final ip = _routerService?.selectedRouter?.ipAddress ??
+        (reviewerModeEnabled || _apiService is MockApiService
+            ? '192.168.1.1'
+            : null);
+    final token = _authService?.sysauth ??
+        (reviewerModeEnabled || _apiService is MockApiService
+            ? 'mock_sysauth'
+            : null);
+    if (ip == null || token == null || _apiService == null) return;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    try {
+      final rawRpc = await _apiService!.call(
+        ip,
+        token,
+        useHttps,
+        object: 'uci',
+        method: 'get',
+        params: {'config': 'firewall'},
+      );
+      if (rawRpc is List && rawRpc.length > 1 && rawRpc[1] is Map) {
+        if (dashboardData != null) {
+          dashboardData!['uciFirewallConfig'] =
+              rawRpc[1]['values'] ?? rawRpc[1];
+        }
+        notifyListeners();
+      }
+    } catch (e, stack) {
+      Logger.exception('refreshFirewallState failed', e, stack);
+    }
+  }
+
+  Future<bool> addFirewallPortForward(
+    FirewallPortForwarding portForward, {
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress;
+    final token = _authService?.sysauth;
+    if (ip == null || token == null || _apiService == null) return false;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.addFirewallPortForward(
+      ip,
+      token,
+      useHttps,
+      portForward: portForward,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  Future<bool> updateFirewallPortForward(
+    FirewallPortForwarding portForward, {
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress;
+    final token = _authService?.sysauth;
+    if (ip == null || token == null || _apiService == null) return false;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.updateFirewallPortForward(
+      ip,
+      token,
+      useHttps,
+      portForward: portForward,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  Future<bool> deleteFirewallPortForward(
+    String sectionKey, {
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress;
+    final token = _authService?.sysauth;
+    if (ip == null || token == null || _apiService == null) return false;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.deleteFirewallPortForward(
+      ip,
+      token,
+      useHttps,
+      sectionKey: sectionKey,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  Future<bool> addFirewallCustomRule(
+    FirewallCustomRule rule, {
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress;
+    final token = _authService?.sysauth;
+    if (ip == null || token == null || _apiService == null) return false;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.addFirewallCustomRule(
+      ip,
+      token,
+      useHttps,
+      rule: rule,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  Future<bool> updateFirewallCustomRule(
+    FirewallCustomRule rule, {
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress;
+    final token = _authService?.sysauth;
+    if (ip == null || token == null || _apiService == null) return false;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.updateFirewallCustomRule(
+      ip,
+      token,
+      useHttps,
+      rule: rule,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  Future<bool> deleteFirewallCustomRule(
+    String sectionKey, {
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress;
+    final token = _authService?.sysauth;
+    if (ip == null || token == null || _apiService == null) return false;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.deleteFirewallCustomRule(
+      ip,
+      token,
+      useHttps,
+      sectionKey: sectionKey,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  Future<bool> reorderFirewallCustomRules({
+    required String targetSectionKey,
+    required String siblingSectionKey,
+    required List<String> expectedRuleOrder,
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress;
+    final token = _authService?.sysauth;
+    if (ip == null || token == null || _apiService == null) return false;
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.reorderFirewallCustomRules(
+      ip,
+      token,
+      useHttps,
+      targetSectionKey: targetSectionKey,
+      siblingSectionKey: siblingSectionKey,
+      expectedRuleOrder: expectedRuleOrder,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  Future<bool> applyPerDeviceNetworkAccessPolicy({
+    required NetworkAccessPolicy policy,
+    BuildContext? context,
+  }) async {
+    final ip = _routerService?.selectedRouter?.ipAddress ??
+        (reviewerModeEnabled || _apiService is MockApiService
+            ? '192.168.1.1'
+            : null);
+    final token = _authService?.sysauth ??
+        (reviewerModeEnabled || _apiService is MockApiService
+            ? 'mock_sysauth'
+            : null);
+    final caps = capabilities ??
+        (reviewerModeEnabled || _apiService is MockApiService
+            ? RouterCapabilities.mock()
+            : null);
+    if (ip == null || token == null || caps == null || _apiService == null) {
+      return false;
+    }
+    final useHttps = _routerService?.selectedRouter?.useHttps ?? false;
+    final success = await _apiService!.applyPerDeviceNetworkAccessPolicy(
+      ip,
+      token,
+      useHttps,
+      policy: policy,
+      capabilities: caps,
+      context: context,
+    );
+    if (success) {
+      await refreshFirewallState();
+    }
+    return success;
+  }
+
+  NetworkAccessPolicy getDeviceNetworkAccessPolicy(String mac) {
+    final normMac = ClientNamingHelper.normalizeMac(mac);
+    final expiry = ClientPolicyScheduleService.instance.getExpiry(normMac);
+
+    if (expiry != null && DateTime.now().isAfter(expiry)) {
+      return NetworkAccessPolicy.unrestricted(normMac);
+    }
+
+    if (reviewerModeEnabled || _apiService is MockApiService) {
+      final mockP = MockApiService.getMockPolicy(normMac);
+      if (mockP != null) {
+        return mockP.copyWith(scheduleExpiry: expiry);
+      }
+    }
+
+    final rawFirewall = dashboardData?['uciFirewallConfig'];
+    if (rawFirewall is Map) {
+      final overview = FirewallOverview.fromUciData(
+        Map<String, dynamic>.from(rawFirewall),
+        backend: capabilities?.firewallBackend ?? FirewallBackend.fw4,
+        isReviewerMode: reviewerModeEnabled,
+      );
+      final recognized = FirewallPolicyTranslator.recognizePolicy(
+        targetMac: normMac,
+        rules: overview.customRules,
+      );
+      if (recognized.hasActiveBlock) {
+        return recognized.policy.copyWith(scheduleExpiry: expiry);
+      }
+    }
+
+    if (_networkActionsController?.isInternetPaused(normMac) ?? false) {
+      return NetworkAccessPolicy.blocked(normMac, scheduleExpiry: expiry);
+    }
+
+    return NetworkAccessPolicy.unrestricted(normMac);
+  }
+
+  Future<bool> setDeviceNetworkAccessPolicy({
+    required NetworkAccessPolicy policy,
+    BuildContext? context,
+  }) async {
+    final normMac = ClientNamingHelper.normalizeMac(policy.targetMac);
+    final normalizedPolicy = policy.copyWith(targetMac: normMac);
+
+    if (normalizedPolicy.isEffectivelyBlocked) {
+      if (context != null && context.mounted) {
+        final safe = await SelfDeviceGuard.checkSelfActionGuardrail(
+          context,
+          actionName: 'Block Internet Access',
+          targetMac: normMac,
+        );
+        if (!safe) return false;
+      } else {
+        final isSelf = await SelfDeviceGuard.isSelfDevice(normMac);
+        if (isSelf) {
+          Logger.warning(
+            'SelfDeviceGuard aborted: cannot block managing device ($normMac)',
+          );
+          return false;
+        }
+      }
+    }
+
+    final success = await applyPerDeviceNetworkAccessPolicy(
+      policy: normalizedPolicy,
+    );
+
+    if (success) {
+      if (normalizedPolicy.scheduleExpiry != null &&
+          normalizedPolicy.isEffectivelyBlocked) {
+        await ClientPolicyScheduleService.instance.saveSchedule(
+          policy: normalizedPolicy,
+        );
+      } else {
+        await ClientPolicyScheduleService.instance.clearSchedule(normMac);
+      }
+
+      _networkActionsController?.setInternetPausedLocally(
+        normMac,
+        normalizedPolicy.isEffectivelyBlocked,
+      );
+      notifyListeners();
+    }
+    return success;
+  }
+
+  Future<void> checkExpiredDevicePolicies() async {
+    final expiredSchedules =
+        ClientPolicyScheduleService.instance.getExpiredSchedules();
+    if (expiredSchedules.isEmpty) return;
+
+    for (final schedule in expiredSchedules) {
+      final normMac = schedule.targetMac;
+      final currentExpiry =
+          ClientPolicyScheduleService.instance.getExpiry(normMac);
+      if (currentExpiry == null || currentExpiry != schedule.scheduleExpiry) {
+        continue;
+      }
+
+      Logger.info('Expiring scheduled network block for $normMac');
+      await setDeviceNetworkAccessPolicy(
+        policy: NetworkAccessPolicy.unrestricted(normMac),
+      );
+      await ClientPolicyScheduleService.instance.clearSchedule(normMac);
+    }
+    notifyListeners();
+  }
 
   Future<bool> updateWiredInterfaceStatus(
     String interfaceName,
@@ -3011,7 +3688,7 @@ class AppState extends ChangeNotifier {
         ? Map<String, dynamic>.from(rawStations)
         : const <String, dynamic>{};
     final wirelessMacs = <String>{
-      ...(_clientController?.knownWirelessMacs ?? {}),
+      ...(_clientController?.knownWirelessMacs.keys ?? {}),
     };
     wirelessStations.forEach((iface, list) {
       if (list is List) {
@@ -3260,6 +3937,7 @@ class AppState extends ChangeNotifier {
     required String encryption,
     required String key,
     required String network,
+    Map<String, String>? extraOptions,
     BuildContext? context,
   }) => _networkActionsController!.addWirelessInterface(
     radioName: radioName,
@@ -3267,6 +3945,7 @@ class AppState extends ChangeNotifier {
     encryption: encryption,
     key: key,
     network: network,
+    extraOptions: extraOptions,
     context: context,
   );
 
@@ -3276,6 +3955,17 @@ class AppState extends ChangeNotifier {
     BuildContext? context,
   }) => _networkActionsController!.deleteWirelessInterface(
     sectionName: sectionName,
+    context: context,
+  );
+
+  /// Update interface-level DHCP configuration
+  Future<bool> updateInterfaceDhcpConfig({
+    required String interface,
+    required Map<String, dynamic> values,
+    BuildContext? context,
+  }) => _networkActionsController!.updateInterfaceDhcpConfig(
+    interface: interface,
+    values: values,
     context: context,
   );
 

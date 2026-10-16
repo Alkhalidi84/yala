@@ -272,39 +272,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n?.aboutAttributionCredits ??
-                              'Attribution & Credits:',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '• ${l10n?.aboutForkNotice ?? "Originally based on cogwheel0/luci-mobile"}\n'
-                          '• ${l10n?.aboutOriginalWorkNotice ?? "Original work Copyright (C) 2025–2026 cogwheel0"}\n'
-                          '• ${l10n?.aboutModificationsNotice ?? "Modifications Copyright (C) 2026 @nightcodex7"}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -334,26 +302,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         },
                         icon: const Icon(Icons.code_rounded, size: 16),
                         label: Text(l10n?.btnGitHub ?? 'GitHub'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          await launchUrlString(
-                            AppConfig.upstreamRepositoryUrl,
-                            mode: LaunchMode.externalApplication,
-                          );
-                        },
-                        icon: const Icon(Icons.fork_right_rounded, size: 16),
-                        label: Text(
-                          l10n?.btnOriginalProject ?? 'Original Project',
-                        ),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -565,72 +513,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     _buildMoreTile(
                       context,
                       icon: isRpcMissing
-                          ? Icons.build_circle_outlined
-                          : Icons.verified_user_outlined,
-                      iconColor: isRpcMissing
-                          ? Colors.amber.shade800
-                          : Colors.teal,
-                      title: l10n?.tileRpcPermissions ?? 'RPC & Permissions',
-                      subtitle: isRpcMissing
-                          ? (l10n?.tileRpcPermissionsSetupRequired ??
-                                'Setup or repair router RPC access')
-                          : (l10n?.tileRpcPermissionsSubtitle ??
-                                'Manage router RPC permissions and modules'),
-                      onTap: () => RpcPermissionsDialog.show(
-                        context,
-                        actionName:
-                            l10n?.tileRpcPermissions ?? 'RPC & Permissions',
-                      ),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color:
-                              (isRpcMissing
-                                      ? Colors.amber.shade900
-                                      : Colors.teal)
-                                  .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color:
-                                (isRpcMissing
-                                        ? Colors.amber.shade700
-                                        : Colors.teal)
-                                    .withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isRpcMissing
-                                  ? Icons.warning_amber_rounded
-                                  : Icons.check_circle_outline_rounded,
-                              size: 12,
-                              color: isRpcMissing
-                                  ? Colors.amber.shade800
-                                  : Colors.teal,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              isRpcMissing ? 'Setup' : 'Ready',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isRpcMissing
-                                    ? Colors.amber.shade900
-                                    : Colors.teal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    _buildMoreTile(
-                      context,
-                      icon: isRpcMissing
                           ? Icons.lock_outline_rounded
                           : Icons.restart_alt,
                       iconColor: isRpcMissing
@@ -816,6 +698,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         return (l10n.modSqmName, l10n.modSqmDesc);
       case 'bandwidth_monitor':
         return (l10n.modBandwidthMonitorName, l10n.modBandwidthMonitorDesc);
+      case 'adguard_home':
+        return (l10n.modAdGuardHomeName, l10n.modAdGuardHomeDesc);
       default:
         return (defaultName, defaultDesc);
     }

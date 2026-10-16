@@ -52,25 +52,27 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initializeAppSession() async {
-    // Concurrently read minimum signals (reviewer mode preference & saved credentials & local fingerprints)
+    final appState = AppState.instance;
+
+    // Concurrently await AppState startup hydration alongside credentials and fingerprints
     final reviewerStorageFuture = SecureStorageService().readValue(
       AppConfig.reviewerModeKey,
     );
     final credsFuture = SecureStorageService().getCredentials();
     final fingerprintsFuture = ClientFingerprintService.instance.initialize();
+    final appStateInitFuture = appState.initializationFuture;
 
     final results = await Future.wait([
       reviewerStorageFuture,
       credsFuture,
       fingerprintsFuture,
+      appStateInitFuture,
     ]);
 
     final reviewerModeEnabled = results[0] as String?;
     final creds = results[1] as Map<String, String?>;
 
     if (!mounted) return;
-
-    final appState = AppState.instance;
 
     if (reviewerModeEnabled == 'true') {
       await appState.setReviewerMode(true);
@@ -79,10 +81,12 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
+    final savedIp = creds['ipAddress'] ?? appState.selectedRouter?.ipAddress;
+    final savedUser = creds['username'] ?? appState.selectedRouter?.username;
+    final savedPass = creds['password'] ?? appState.selectedRouter?.password;
+
     final hasSavedCreds =
-        creds['ipAddress'] != null &&
-        creds['ipAddress']!.isNotEmpty &&
-        creds['password'] != null;
+        savedIp != null && savedIp.isNotEmpty && savedPass != null;
 
     if (hasSavedCreds) {
       await LocalNetworkPermissionService.ensurePermissionGranted();
@@ -90,9 +94,9 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     _navigateToLoginScreen(
-      initialIp: creds['ipAddress'],
-      initialUsername: creds['username'],
-      initialPassword: creds['password'],
+      initialIp: savedIp,
+      initialUsername: savedUser,
+      initialPassword: savedPass,
     );
   }
 

@@ -40,6 +40,7 @@ class DashboardController {
     tryAutoLogin,
     required Future<void> Function() fetchPublicIps,
     required void Function(String v4, String v6) setPublicIps,
+    DashboardConnectionStatus Function()? connectionStatusRef,
     required void Function(DashboardConnectionStatus status)
     setConnectionStatus,
     required void Function() startThroughputTimer,
@@ -57,6 +58,7 @@ class DashboardController {
        _tryAutoLogin = tryAutoLogin,
        _fetchPublicIps = fetchPublicIps,
        _setPublicIps = setPublicIps,
+       _connectionStatusRef = connectionStatusRef,
        _setConnectionStatus = setConnectionStatus,
        _startThroughputTimer = startThroughputTimer,
        _processDhcpLeases = processDhcpLeases,
@@ -74,7 +76,19 @@ class DashboardController {
   final Future<bool> Function({bool force, bool fetchDashboard}) _tryAutoLogin;
   final Future<void> Function() _fetchPublicIps;
   final void Function(String v4, String v6) _setPublicIps;
+  final DashboardConnectionStatus Function()? _connectionStatusRef;
   final void Function(DashboardConnectionStatus status) _setConnectionStatus;
+  DashboardConnectionStatus _currentConnectionStatus =
+      DashboardConnectionStatus.connected;
+
+  DashboardConnectionStatus get currentConnectionStatus =>
+      _connectionStatusRef?.call() ?? _currentConnectionStatus;
+
+  void _updateConnectionStatus(DashboardConnectionStatus status) {
+    _currentConnectionStatus = status;
+    _setConnectionStatus(status);
+  }
+
   final void Function() _startThroughputTimer;
   final Map<String, dynamic> Function(Map<String, dynamic> rawDhcpData)
   _processDhcpLeases;
@@ -124,6 +138,13 @@ class DashboardController {
     _isDashboardLoading = false;
     _activeFetchFuture = null;
     _fetchEpoch++;
+    _updateConnectionStatus(DashboardConnectionStatus.connected);
+  }
+
+  /// Invalidates any in-flight background dashboard fetch to prevent stale overrides.
+  void invalidateInFlightFetches() {
+    _fetchEpoch++;
+    _activeFetchFuture = null;
   }
 
   /// Updates system information in cached dashboard data (e.g. from throughput ticks).
@@ -197,6 +218,11 @@ class DashboardController {
     bool probeFailed = false;
     String? probeError;
     Map<String, dynamic> featuresData = {};
+    bool hasAdGuardHome = false;
+    bool hasOdhcpd = false;
+    bool hasCron = false;
+    bool hasDropbear = false;
+    Map<String, dynamic>? probedBoardJson;
 
     try {
       // 1. Authoritative check: OpenWrt rpcd session.access returns exact effective permissions
@@ -372,37 +398,92 @@ class DashboardController {
         } catch (_) {}
       }
 
-      if (!ubusObjects.contains('luci-rpc')) {
+      try {
+        final luciRpcRes = await _apiService!.call(
+          ip,
+          sysauth,
+          useHttps,
+          object: 'luci-rpc',
+          method: 'getBoardJSON',
+        );
+        if (luciRpcRes is List &&
+            luciRpcRes.isNotEmpty &&
+            luciRpcRes[0] == 0) {
+          ubusObjects.add('luci-rpc');
+          if (luciRpcRes.length > 1 && luciRpcRes[1] is Map) {
+            probedBoardJson = Map<String, dynamic>.from(luciRpcRes[1] as Map);
+          }
+        }
+      } catch (_) {}
+
+      if (probedBoardJson == null && ubusObjects.contains('file')) {
         try {
-          final luciRpcRes = await _apiService!.call(
+          final fileRes = await _apiService!.call(
             ip,
             sysauth,
             useHttps,
-            object: 'luci-rpc',
-            method: 'getBoardJSON',
+            object: 'file',
+            method: 'read',
+            params: {'path': '/etc/board.json'},
           );
-          if (luciRpcRes is List &&
-              luciRpcRes.isNotEmpty &&
-              luciRpcRes[0] == 0) {
-            ubusObjects.add('luci-rpc');
+          if (fileRes is List &&
+              fileRes.isNotEmpty &&
+              fileRes[0] == 0 &&
+              fileRes.length > 1 &&
+              fileRes[1] is Map) {
+            final dataStr = (fileRes[1] as Map)['data']?.toString();
+            if (dataStr != null && dataStr.trim().startsWith('{')) {
+              probedBoardJson = jsonDecode(dataStr) as Map<String, dynamic>;
+            }
           }
         } catch (_) {}
       }
 
-      if (!ubusObjects.contains('rc')) {
+      Map<String, dynamic> rcServices = {};
+      try {
+        final rcRes = await _apiService!.call(
+          ip,
+          sysauth,
+          useHttps,
+          object: 'rc',
+          method: 'list',
+        );
+        if (rcRes is List && rcRes.isNotEmpty && rcRes[0] == 0) {
+          ubusObjects.add('rc');
+          if (rcRes.length > 1 && rcRes[1] is Map) {
+            rcServices = Map<String, dynamic>.from(rcRes[1] as Map);
+          }
+        }
+      } catch (_) {}
+
+      if (rcServices.isEmpty) {
         try {
-          final rcRes = await _apiService!.call(
+          final srvRes = await _apiService!.call(
             ip,
             sysauth,
             useHttps,
-            object: 'rc',
+            object: 'service',
             method: 'list',
           );
-          if (rcRes is List && rcRes.isNotEmpty && rcRes[0] == 0) {
-            ubusObjects.add('rc');
+          if (srvRes is List &&
+              srvRes.length > 1 &&
+              srvRes[0] == 0 &&
+              srvRes[1] is Map) {
+            ubusObjects.add('service');
+            rcServices = Map<String, dynamic>.from(srvRes[1] as Map);
           }
         } catch (_) {}
       }
+
+      final serviceKeys = rcServices.keys.map((k) => k.toLowerCase()).toSet();
+      hasAdGuardHome = serviceKeys.contains('adguardhome') ||
+          uciPermissions.containsKey('adguardhome');
+      hasOdhcpd = serviceKeys.contains('odhcpd') ||
+          ubusObjects.contains('odhcpd');
+      hasCron = serviceKeys.contains('cron') ||
+          serviceKeys.contains('crond');
+      hasDropbear = serviceKeys.contains('dropbear') ||
+          uciPermissions.containsKey('dropbear');
 
       try {
         final featuresRes = await _apiService!.call(
@@ -553,6 +634,11 @@ class DashboardController {
       probedAt: DateTime.now(),
       probeFailed: probeFailed,
       lastProbeError: probeError,
+      hasAdGuardHome: hasAdGuardHome,
+      hasOdhcpd: hasOdhcpd,
+      hasCron: hasCron,
+      hasDropbear: hasDropbear,
+      boardJson: probedBoardJson,
     );
 
     final caps = _capabilities;
@@ -772,6 +858,7 @@ class DashboardController {
         _startThroughputTimer();
 
         _isDashboardLoading = false;
+        _updateConnectionStatus(DashboardConnectionStatus.connected);
         _notifyListeners();
       } catch (e) {
         _dashboardError = 'Failed to fetch dashboard data: $e';
@@ -787,6 +874,11 @@ class DashboardController {
     if (_routerService?.selectedRouter == null ||
         _authService?.sysauth == null) {
       return;
+    }
+
+    if (force &&
+        currentConnectionStatus == DashboardConnectionStatus.disconnected) {
+      _updateConnectionStatus(DashboardConnectionStatus.reconnecting);
     }
 
     if (_dashboardData == null) {
@@ -2257,6 +2349,7 @@ class DashboardController {
 
       _dashboardData = {
         'boardInfo': boardInfoData,
+        'boardJson': _capabilities?.boardJson,
         'sysInfo': sysInfoData,
         'networkDevices': networkData,
         'interfaceDump': interfaceDump,
@@ -2292,6 +2385,9 @@ class DashboardController {
         await _routerService?.updateSelectedRouterHostname(hostname);
       }
 
+      _dashboardError = null;
+      _updateConnectionStatus(DashboardConnectionStatus.connected);
+
       _startThroughputTimer();
       unawaited(_fetchPublicIps());
     } catch (e) {
@@ -2308,7 +2404,7 @@ class DashboardController {
           targetRouterId != _routerService?.selectedRouter?.id) {
         return;
       }
-      _setConnectionStatus(DashboardConnectionStatus.disconnected);
+      _updateConnectionStatus(DashboardConnectionStatus.disconnected);
       final errorMessage = e.toString();
       if (errorMessage.contains('Access denied')) {
         _dashboardError = 'Access Denied: Check RPC permissions for this user.';

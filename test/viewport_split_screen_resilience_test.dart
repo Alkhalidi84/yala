@@ -15,8 +15,17 @@ import 'package:yet_another_luci_app/modules/wireless_management/widgets/wifi_qr
 import 'package:yet_another_luci_app/modules/wireless_management/models/wireless_info.dart';
 import 'package:yet_another_luci_app/utils/os_platform_integration.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:yet_another_luci_app/utils/self_device_guard.dart';
 
 void main() {
+  setUp(() {
+    SelfDeviceGuard.setMockLocalAddresses({'192.168.1.50', '00:11:22:33:44:55'});
+  });
+
+  tearDown(() {
+    SelfDeviceGuard.setMockLocalAddresses(null);
+  });
+
   group('LuciBreakpoints Multi-Window & Freeform Sizing Tests', () {
     testWidgets('Evaluates correctly on narrow phone split-view (360x360)', (
       WidgetTester tester,

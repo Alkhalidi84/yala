@@ -161,10 +161,15 @@ class MainActivity : FlutterFragmentActivity() {
     private fun unlockHighRefreshRate() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
-                val display = this.display
-                val supportedModes = display?.supportedModes
-                val maxMode = supportedModes?.maxByOrNull { it.refreshRate }
-                if (maxMode != null) {
+                val display = this.display ?: return
+                val currentMode = display.mode
+                val supportedModes = display.supportedModes ?: return
+                val maxMode = supportedModes
+                    .filter { it.physicalWidth == currentMode.physicalWidth && it.physicalHeight == currentMode.physicalHeight }
+                    .maxByOrNull { it.refreshRate }
+                    ?: supportedModes.maxByOrNull { it.refreshRate }
+
+                if (maxMode != null && window.attributes.preferredDisplayModeId != maxMode.modeId) {
                     val lp = window.attributes
                     lp.preferredDisplayModeId = maxMode.modeId
                     window.attributes = lp
@@ -175,10 +180,15 @@ class MainActivity : FlutterFragmentActivity() {
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 @Suppress("DEPRECATION")
-                val display = windowManager.defaultDisplay
-                val supportedModes = display?.supportedModes
-                val maxMode = supportedModes?.maxByOrNull { it.refreshRate }
-                if (maxMode != null) {
+                val display = windowManager.defaultDisplay ?: return
+                val currentMode = display.mode
+                val supportedModes = display.supportedModes ?: return
+                val maxMode = supportedModes
+                    .filter { it.physicalWidth == currentMode.physicalWidth && it.physicalHeight == currentMode.physicalHeight }
+                    .maxByOrNull { it.refreshRate }
+                    ?: supportedModes.maxByOrNull { it.refreshRate }
+
+                if (maxMode != null && window.attributes.preferredDisplayModeId != maxMode.modeId) {
                     val lp = window.attributes
                     lp.preferredDisplayModeId = maxMode.modeId
                     window.attributes = lp

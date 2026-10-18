@@ -177,7 +177,8 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
   void _loadSubnetDhcpDefaults() {
     try {
       final appState = ref.read(appStateProvider);
-      final rawDhcp = appState.dashboardData?['uciDhcpConfig'] ??
+      final rawDhcp =
+          appState.dashboardData?['uciDhcpConfig'] ??
           appState.dashboardData?['dhcp'];
       if (rawDhcp is Map) {
         final values = (rawDhcp['values'] is Map)
@@ -200,8 +201,9 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
             if (v['dhcpv6'] != null) _dhcpv6Mode = v['dhcpv6'].toString();
             if (v['dns'] != null) {
               final dnsVal = v['dns'];
-              _dnsServersController.text =
-                  dnsVal is List ? dnsVal.join(', ') : dnsVal.toString();
+              _dnsServersController.text = dnsVal is List
+                  ? dnsVal.join(', ')
+                  : dnsVal.toString();
             }
           }
         });
@@ -264,9 +266,9 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
       );
 
       if (mounted && values != null && values.isNotEmpty) {
-
         if (values.isNotEmpty) {
-          final liveKey = values['key']?.toString() ??
+          final liveKey =
+              values['key']?.toString() ??
               values['password']?.toString() ??
               values['passphrase']?.toString() ??
               values['sae_password']?.toString() ??
@@ -435,7 +437,8 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
         _ssidController.text.trim() != widget.interface.ssid;
     final isPassphraseChanged =
         _passphraseController.text != _initialPassphrase;
-    final isEncryptionChanged = _selectedEncryption !=
+    final isEncryptionChanged =
+        _selectedEncryption !=
         _mapEncryptionToUci(
           widget.interface.securityMode,
           widget.interface.encryption,
@@ -479,8 +482,8 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
 
     final String resolvedPmf =
         (_selectedEncryption == 'sae' || _selectedEncryption == 'owe')
-            ? '2'
-            : (_selectedEncryption == 'none' ? '0' : _selectedPmf);
+        ? '2'
+        : (_selectedEncryption == 'none' ? '0' : _selectedPmf);
 
     final newValues = <String, String>{
       'ssid': _ssidController.text.trim(),
@@ -502,8 +505,9 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
     };
 
     if (_mobilityDomainController.text.trim().isNotEmpty) {
-      newValues['mobility_domain'] =
-          _mobilityDomainController.text.trim().toLowerCase();
+      newValues['mobility_domain'] = _mobilityDomainController.text
+          .trim()
+          .toLowerCase();
     }
     if (_dtimPeriodController.text.trim().isNotEmpty) {
       newValues['dtim_period'] = _dtimPeriodController.text.trim();
@@ -515,8 +519,8 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
       newValues['inactivity_limit'] = _inactivityLimitController.text.trim();
     }
     if (_maxListenIntervalController.text.trim().isNotEmpty) {
-      newValues['max_listen_interval'] =
-          _maxListenIntervalController.text.trim();
+      newValues['max_listen_interval'] = _maxListenIntervalController.text
+          .trim();
     }
 
     if (_macfilter != 'disable') {
@@ -888,7 +892,8 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
                           _buildBanner(
                             color: Colors.amber,
                             icon: Icons.shield_outlined,
-                            text: l10n?.changesDirectRouterWarning ??
+                            text:
+                                l10n?.changesDirectRouterWarning ??
                                 'Changes will be applied directly to the router.',
                           ),
                           const SizedBox(height: 12),
@@ -1016,7 +1021,8 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
                             _buildBanner(
                               color: Colors.amber,
                               icon: Icons.warning_amber_rounded,
-                              text: l10n?.openNetworkWarningBody ??
+                              text:
+                                  l10n?.openNetworkWarningBody ??
                                   'An open Wi-Fi network transmits data without encryption. Anyone within range can connect and monitor unencrypted traffic.',
                             ),
                             const SizedBox(height: 10),
@@ -1122,12 +1128,15 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
                                         ),
                                       ),
                                     ],
-                                    onChanged: (_selectedEncryption == 'sae' ||
+                                    onChanged:
+                                        (_selectedEncryption == 'sae' ||
                                             _selectedEncryption == 'none')
                                         ? null
                                         : (val) {
                                             if (val != null) {
-                                              setState(() => _selectedPmf = val);
+                                              setState(
+                                                () => _selectedPmf = val,
+                                              );
                                             }
                                           },
                                   ),
@@ -1308,9 +1317,8 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
                                     style: TextStyle(fontSize: 11),
                                   ),
                                   value: _multicastToUnicast,
-                                  onChanged: (val) => setState(
-                                    () => _multicastToUnicast = val,
-                                  ),
+                                  onChanged: (val) =>
+                                      setState(() => _multicastToUnicast = val),
                                 ),
                                 SwitchListTile(
                                   contentPadding: EdgeInsets.zero,
@@ -1548,8 +1556,7 @@ class _EditSsidDialogState extends ConsumerState<EditSsidDialog> {
 
                                 // ── Group 4: IP & DHCP Settings ───────────
                                 _buildSubHeader(
-                                  l10n?.secGroupIpDhcp ??
-                                      'IP & DHCP Settings',
+                                  l10n?.secGroupIpDhcp ?? 'IP & DHCP Settings',
                                   Icons.settings_ethernet_rounded,
                                 ),
                                 const SizedBox(height: 6),

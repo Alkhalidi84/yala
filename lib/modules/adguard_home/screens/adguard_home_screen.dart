@@ -34,10 +34,7 @@ import '../widgets/adguard_topology_card.dart';
 class AdGuardHomeScreen extends ConsumerStatefulWidget {
   final String? routerId;
 
-  const AdGuardHomeScreen({
-    super.key,
-    this.routerId,
-  });
+  const AdGuardHomeScreen({super.key, this.routerId});
 
   @override
   ConsumerState<AdGuardHomeScreen> createState() => _AdGuardHomeScreenState();
@@ -59,8 +56,9 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _activeRouterId = _resolveRouterId();
-      _controller =
-          ref.read(adguardControllerProvider(_activeRouterId!).notifier);
+      _controller = ref.read(
+        adguardControllerProvider(_activeRouterId!).notifier,
+      );
       _controller?.loadProfiles();
       _controller?.startPolling();
     });
@@ -74,8 +72,9 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
         if (!mounted) return;
         _controller?.stopPolling(updateState: false);
         _activeRouterId = _resolveRouterId();
-        _controller =
-            ref.read(adguardControllerProvider(_activeRouterId!).notifier);
+        _controller = ref.read(
+          adguardControllerProvider(_activeRouterId!).notifier,
+        );
         _controller?.loadProfiles();
         _controller?.startPolling();
       });
@@ -89,7 +88,9 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
   }
 
   String _getPollingLabel(
-      AppLocalizations? l10n, AdGuardPollingInterval interval) {
+    AppLocalizations? l10n,
+    AdGuardPollingInterval interval,
+  ) {
     switch (interval) {
       case AdGuardPollingInterval.off:
         return l10n?.aghPollingOff ?? 'Off';
@@ -224,7 +225,8 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
               return [
                 ...state.profiles.map((profile) {
                   final isCurrent = state.activeProfile?.id == profile.id;
-                  final isExt = profile.type == AdGuardInstanceType.externalHost;
+                  final isExt =
+                      profile.type == AdGuardInstanceType.externalHost;
                   return PopupMenuItem<String>(
                     key: Key('agh_profile_item_${profile.id}'),
                     value: profile.id,
@@ -240,15 +242,20 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
                           child: Text(
                             profile.name,
                             style: TextStyle(
-                              fontWeight:
-                                  isCurrent ? FontWeight.bold : FontWeight.normal,
+                              fontWeight: isCurrent
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                               color: isCurrent ? colorScheme.primary : null,
                             ),
                           ),
                         ),
                         if (isCurrent) ...[
                           const SizedBox(width: 4),
-                          Icon(Icons.check, size: 16, color: colorScheme.primary),
+                          Icon(
+                            Icons.check,
+                            size: 16,
+                            color: colorScheme.primary,
+                          ),
                         ],
                       ],
                     ),
@@ -262,9 +269,7 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
                     children: [
                       Icon(Icons.add_rounded, size: 18),
                       SizedBox(width: 8),
-                      Expanded(
-                        child: Text('Add External Instance'),
-                      ),
+                      Expanded(child: Text('Add External Instance')),
                     ],
                   ),
                 ),
@@ -277,9 +282,7 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
                       children: [
                         Icon(Icons.edit_outlined, size: 18),
                         SizedBox(width: 8),
-                        Expanded(
-                          child: Text('Edit Current Profile'),
-                        ),
+                        Expanded(child: Text('Edit Current Profile')),
                       ],
                     ),
                   ),
@@ -389,25 +392,30 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
               _buildConnectionErrorView(context, controller, state, l10n, theme)
             else ...[
               // Connection Status Banners
-              if (state.connectionStatus == AdGuardConnectionStatus.authRequired)
+              if (state.connectionStatus ==
+                  AdGuardConnectionStatus.authRequired)
                 _buildAuthRequiredBanner(context, controller, l10n, theme),
 
-              if (state.connectionStatus == AdGuardConnectionStatus.invalidEndpoint)
+              if (state.connectionStatus ==
+                  AdGuardConnectionStatus.invalidEndpoint)
                 _buildBanner(
                   context,
                   icon: Icons.error_outline,
                   color: Colors.red.shade700,
-                  message: l10n?.aghInvalidEndpoint ??
+                  message:
+                      l10n?.aghInvalidEndpoint ??
                       'The configured HTTP port returned a response that is not AdGuard Home.',
                   keyName: 'agh_invalid_endpoint_banner',
                 ),
 
-              if (state.connectionStatus == AdGuardConnectionStatus.apiUnreachable)
+              if (state.connectionStatus ==
+                  AdGuardConnectionStatus.apiUnreachable)
                 _buildBanner(
                   context,
                   icon: Icons.cloud_off_rounded,
                   color: Colors.amber.shade800,
-                  message: l10n?.aghApiUnreachable ??
+                  message:
+                      l10n?.aghApiUnreachable ??
                       'Unable to reach AdGuard Home API.',
                   keyName: 'agh_api_unreachable_banner',
                   trailing: TextButton(
@@ -421,15 +429,19 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
                   context,
                   icon: Icons.warning_amber_rounded,
                   color: Colors.amber.shade800,
-                  message: l10n?.aghDegradedState ??
+                  message:
+                      l10n?.aghDegradedState ??
                       'Some AdGuard Home telemetry is degraded.',
                   keyName: 'agh_degraded_banner',
                 ),
 
               if (state.generalError != null &&
-                  state.connectionStatus != AdGuardConnectionStatus.apiUnreachable &&
-                  state.connectionStatus != AdGuardConnectionStatus.invalidEndpoint &&
-                  state.connectionStatus != AdGuardConnectionStatus.authRequired)
+                  state.connectionStatus !=
+                      AdGuardConnectionStatus.apiUnreachable &&
+                  state.connectionStatus !=
+                      AdGuardConnectionStatus.invalidEndpoint &&
+                  state.connectionStatus !=
+                      AdGuardConnectionStatus.authRequired)
                 _buildBanner(
                   context,
                   icon: Icons.error_outline_rounded,
@@ -492,9 +504,7 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
               ),
 
               // Top Lists Card (Blocked, Queried, Clients)
-              AdGuardTopListsCard(
-                stats: state.stats,
-              ),
+              AdGuardTopListsCard(stats: state.stats),
 
               // DNS Topology Card
               AdGuardTopologyCard(
@@ -618,7 +628,9 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.5,
+                    ),
                   ),
                 ),
                 color: theme.colorScheme.surfaceContainerLow,
@@ -728,14 +740,9 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
             child: FilledButton.tonal(
               key: const Key('agh_enter_credentials_button'),
               onPressed: () {
-                AdGuardCredentialsDialog.show(
-                  context,
-                  controller: controller,
-                );
+                AdGuardCredentialsDialog.show(context, controller: controller);
               },
-              child: Text(
-                l10n?.aghEnterCredentials ?? 'Enter Credentials',
-              ),
+              child: Text(l10n?.aghEnterCredentials ?? 'Enter Credentials'),
             ),
           ),
         ],
@@ -774,10 +781,7 @@ class _AdGuardHomeScreenState extends ConsumerState<AdGuardHomeScreen> {
               ),
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing],
         ],
       ),
     );

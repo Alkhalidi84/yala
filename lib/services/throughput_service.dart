@@ -189,7 +189,8 @@ class ThroughputService {
 
           networkData.forEach((devName, devData) {
             if (devName == 'lo' || devName == 'loopback') return;
-            if (effectiveDevices.isEmpty || effectiveDevices.contains(devName)) {
+            if (effectiveDevices.isEmpty ||
+                effectiveDevices.contains(devName)) {
               final lastDevData = _lastStats![devName];
               if (lastDevData is Map<String, dynamic> &&
                   devData is Map<String, dynamic>) {

@@ -1244,79 +1244,82 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
           child: Transform.scale(
             scale: 0.8,
             child: Switch(
-            value: effectiveGlobalValue,
-            onChanged: isGlobalPending
-                ? null
-                : (val) async {
-                    if (_isTogglingGlobalDdns) {
-                      return;
-                    }
-                    setState(() {
-                      _isTogglingGlobalDdns = true;
-                    });
-                    const actionKey = 'toggle_global_ddns';
-                    context.showToastLoading(
-                      val
-                          ? (l10n?.servicesSysDdnsEnablingToast ??
-                                'Enabling DDNS service...')
-                          : (l10n?.servicesSysDdnsDisablingToast ??
-                                'Disabling DDNS service...'),
-                      actionKey: actionKey,
-                    );
-                    try {
-                      final success = await appState.toggleGlobalDdns(val);
-                      if (context.mounted) {
-                        if (success) {
-                          context.showToastSuccess(
-                            val
-                                ? (l10n?.servicesSysDdnsEnabledToast ??
-                                      'DDNS service enabled')
-                                : (l10n?.servicesSysDdnsDisabledToast ??
-                                      'DDNS service disabled'),
-                            actionKey: actionKey,
-                          );
-                        } else {
+              value: effectiveGlobalValue,
+              onChanged: isGlobalPending
+                  ? null
+                  : (val) async {
+                      if (_isTogglingGlobalDdns) {
+                        return;
+                      }
+                      setState(() {
+                        _isTogglingGlobalDdns = true;
+                      });
+                      const actionKey = 'toggle_global_ddns';
+                      context.showToastLoading(
+                        val
+                            ? (l10n?.servicesSysDdnsEnablingToast ??
+                                  'Enabling DDNS service...')
+                            : (l10n?.servicesSysDdnsDisablingToast ??
+                                  'Disabling DDNS service...'),
+                        actionKey: actionKey,
+                      );
+                      try {
+                        final success = await appState.toggleGlobalDdns(val);
+                        if (context.mounted) {
+                          if (success) {
+                            context.showToastSuccess(
+                              val
+                                  ? (l10n?.servicesSysDdnsEnabledToast ??
+                                        'DDNS service enabled')
+                                  : (l10n?.servicesSysDdnsDisabledToast ??
+                                        'DDNS service disabled'),
+                              actionKey: actionKey,
+                            );
+                          } else {
+                            context.showToastError(
+                              l10n?.servicesSysDdnsToggleFailedToast ??
+                                  'Failed to update DDNS service state',
+                              actionKey: actionKey,
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
                           context.showToastError(
                             l10n?.servicesSysDdnsToggleFailedToast ??
                                 'Failed to update DDNS service state',
+                            subtitle: e.toString().replaceAll(
+                              'Exception: ',
+                              '',
+                            ),
                             actionKey: actionKey,
                           );
                         }
+                      } finally {
+                        if (mounted) {
+                          setState(() {
+                            _isTogglingGlobalDdns = false;
+                          });
+                        }
                       }
-                    } catch (e) {
-                      if (context.mounted) {
-                        context.showToastError(
-                          l10n?.servicesSysDdnsToggleFailedToast ??
-                              'Failed to update DDNS service state',
-                          subtitle: e.toString().replaceAll('Exception: ', ''),
-                          actionKey: actionKey,
-                        );
-                      }
-                    } finally {
-                      if (mounted) {
-                        setState(() {
-                          _isTogglingGlobalDdns = false;
-                        });
-                      }
-                    }
-                  },
+                    },
+            ),
+          ),
+        ),
+        if (isGlobalPending)
+          Padding(
+            padding: const EdgeInsets.only(left: 6.0),
+            child: SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           ),
-          if (isGlobalPending)
-            Padding(
-              padding: const EdgeInsets.only(left: 6.0),
-              child: SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
-        ],
-      );
+      ],
+    );
 
     Widget buildAddButton() => FilledButton.icon(
       onPressed: () => _showAddEditDdnsDialog(context, existingInstance: null),
@@ -1535,11 +1538,13 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
       ),
       child: Column(
         children: ddns.instances
-            .map((instance) => _buildDdnsInstanceTile(
-                  context,
-                  instance,
-                  isGlobalEnabled: isGlobalEnabled,
-                ))
+            .map(
+              (instance) => _buildDdnsInstanceTile(
+                context,
+                instance,
+                isGlobalEnabled: isGlobalEnabled,
+              ),
+            )
             .toList(),
       ),
     );
@@ -1558,8 +1563,9 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
       orElse: () => kDdnsProviderPresets.last,
     );
 
-    final isInstancePending =
-        _pendingDdnsInstanceToggles.contains(instance.name);
+    final isInstancePending = _pendingDdnsInstanceToggles.contains(
+      instance.name,
+    );
     final effectiveInstanceValue = instance.enabled;
 
     return AnimatedOpacity(
@@ -1571,12 +1577,10 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
           color: !isGlobalEnabled
               ? theme.cardColor.withValues(alpha: 0.5)
               : (instance.enabled
-                  ? theme.cardColor
-                  : theme.cardColor.withAlpha(180)),
+                    ? theme.cardColor
+                    : theme.cardColor.withAlpha(180)),
           border: Border(
-            bottom: BorderSide(
-              color: theme.dividerColor.withAlpha(50),
-            ),
+            bottom: BorderSide(color: theme.dividerColor.withAlpha(50)),
           ),
         ),
         child: Padding(
@@ -1595,17 +1599,17 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
                     decoration: BoxDecoration(
                       color: !isGlobalEnabled
                           ? theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.5)
+                                .withValues(alpha: 0.5)
                           : (instance.enabled
-                              ? LuciStatusColors.successBg(context)
-                              : LuciStatusColors.infoBg(context)),
+                                ? LuciStatusColors.successBg(context)
+                                : LuciStatusColors.infoBg(context)),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
                         color: !isGlobalEnabled
                             ? theme.dividerColor.withValues(alpha: 0.3)
                             : (instance.enabled
-                                ? LuciStatusColors.successBorder(context)
-                                : LuciStatusColors.infoBorder(context)),
+                                  ? LuciStatusColors.successBorder(context)
+                                  : LuciStatusColors.infoBorder(context)),
                       ),
                     ),
                     child: Text(
@@ -1614,11 +1618,12 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         color: !isGlobalEnabled
-                            ? theme.colorScheme.onSurfaceVariant
-                                .withValues(alpha: 0.6)
+                            ? theme.colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.6,
+                              )
                             : (instance.enabled
-                                ? LuciStatusColors.successText(context)
-                                : LuciStatusColors.infoText(context)),
+                                  ? LuciStatusColors.successText(context)
+                                  : LuciStatusColors.infoText(context)),
                       ),
                     ),
                   ),
@@ -1642,101 +1647,102 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
                         child: Transform.scale(
                           scale: 0.8,
                           child: Switch(
-                          value: effectiveInstanceValue,
-                          onChanged: (isGlobalEnabled && !isInstancePending)
-                              ? (val) async {
-                                  if (_pendingDdnsInstanceToggles.contains(
-                                    instance.name,
-                                  )) {
-                                    return;
-                                  }
-                                  setState(() {
-                                    _pendingDdnsInstanceToggles.add(
+                            value: effectiveInstanceValue,
+                            onChanged: (isGlobalEnabled && !isInstancePending)
+                                ? (val) async {
+                                    if (_pendingDdnsInstanceToggles.contains(
                                       instance.name,
+                                    )) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      _pendingDdnsInstanceToggles.add(
+                                        instance.name,
+                                      );
+                                    });
+                                    final actionKey =
+                                        'toggle_ddns_instance_${instance.name}';
+                                    context.showToastLoading(
+                                      val
+                                          ? (l10n?.servicesSysDdnsInstanceEnablingToast(
+                                                  instance.name,
+                                                ) ??
+                                                'Enabling DDNS instance "${instance.name}"...')
+                                          : (l10n?.servicesSysDdnsInstanceDisablingToast(
+                                                  instance.name,
+                                                ) ??
+                                                'Disabling DDNS instance "${instance.name}"...'),
+                                      actionKey: actionKey,
                                     );
-                                  });
-                                  final actionKey =
-                                      'toggle_ddns_instance_${instance.name}';
-                                  context.showToastLoading(
-                                    val
-                                        ? (l10n?.servicesSysDdnsInstanceEnablingToast(
-                                                instance.name,
-                                              ) ??
-                                              'Enabling DDNS instance "${instance.name}"...')
-                                        : (l10n?.servicesSysDdnsInstanceDisablingToast(
-                                                instance.name,
-                                              ) ??
-                                              'Disabling DDNS instance "${instance.name}"...'),
-                                    actionKey: actionKey,
-                                  );
-                                  try {
-                                    final updated = instance.copyWith(
-                                      enabled: val,
-                                    );
-                                    final ok = await appState
-                                        .saveDdnsInstance(updated);
-                                    if (context.mounted) {
-                                      if (ok) {
-                                        final statusStr = val
-                                            ? (l10n?.statusActive ?? 'enabled')
-                                            : (l10n?.statusDisabled ??
-                                                'disabled');
-                                        context.showToastSuccess(
-                                          l10n?.servicesSysDdnsInstanceToggleToast(
-                                                instance.name,
-                                                statusStr,
-                                              ) ??
-                                              '${instance.name} $statusStr',
-                                          actionKey: actionKey,
-                                        );
-                                      } else {
+                                    try {
+                                      final updated = instance.copyWith(
+                                        enabled: val,
+                                      );
+                                      final ok = await appState
+                                          .saveDdnsInstance(updated);
+                                      if (context.mounted) {
+                                        if (ok) {
+                                          final statusStr = val
+                                              ? (l10n?.statusActive ??
+                                                    'enabled')
+                                              : (l10n?.statusDisabled ??
+                                                    'disabled');
+                                          context.showToastSuccess(
+                                            l10n?.servicesSysDdnsInstanceToggleToast(
+                                                  instance.name,
+                                                  statusStr,
+                                                ) ??
+                                                '${instance.name} $statusStr',
+                                            actionKey: actionKey,
+                                          );
+                                        } else {
+                                          context.showToastError(
+                                            l10n?.servicesSysDdnsUpdateFailedToast ??
+                                                'Failed to update instance',
+                                            actionKey: actionKey,
+                                          );
+                                        }
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
                                         context.showToastError(
                                           l10n?.servicesSysDdnsUpdateFailedToast ??
                                               'Failed to update instance',
+                                          subtitle: e.toString().replaceAll(
+                                            'Exception: ',
+                                            '',
+                                          ),
                                           actionKey: actionKey,
                                         );
                                       }
-                                    }
-                                  } catch (e) {
-                                    if (context.mounted) {
-                                      context.showToastError(
-                                        l10n?.servicesSysDdnsUpdateFailedToast ??
-                                            'Failed to update instance',
-                                        subtitle: e.toString().replaceAll(
-                                          'Exception: ',
-                                          '',
-                                        ),
-                                        actionKey: actionKey,
-                                      );
-                                    }
-                                  } finally {
-                                    if (mounted) {
-                                      setState(() {
-                                        _pendingDdnsInstanceToggles.remove(
-                                          instance.name,
-                                        );
-                                      });
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() {
+                                          _pendingDdnsInstanceToggles.remove(
+                                            instance.name,
+                                          );
+                                        });
+                                      }
                                     }
                                   }
-                                }
-                              : null,
-                        ),
-                      ),
-                    ),
-                    if (isInstancePending)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6.0),
-                        child: SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: theme.colorScheme.primary,
+                                : null,
                           ),
                         ),
                       ),
-                  ],
-                ),
+                      if (isInstancePending)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 6.0),
+                          child: SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -1777,17 +1783,17 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
                       decoration: BoxDecoration(
                         color: !isGlobalEnabled
                             ? theme.colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.4)
+                                  .withValues(alpha: 0.4)
                             : (instance.statusStr!.contains('Synced')
-                                ? LuciStatusColors.successBg(context)
-                                : LuciStatusColors.warningBg(context)),
+                                  ? LuciStatusColors.successBg(context)
+                                  : LuciStatusColors.warningBg(context)),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
                           color: !isGlobalEnabled
                               ? theme.dividerColor.withValues(alpha: 0.2)
                               : (instance.statusStr!.contains('Synced')
-                                  ? LuciStatusColors.successBorder(context)
-                                  : LuciStatusColors.warningBorder(context)),
+                                    ? LuciStatusColors.successBorder(context)
+                                    : LuciStatusColors.warningBorder(context)),
                         ),
                       ),
                       child: Text(
@@ -1798,11 +1804,12 @@ class _ServicesSystemScreenState extends ConsumerState<ServicesSystemScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: !isGlobalEnabled
-                              ? theme.colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.6)
+                              ? theme.colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.6,
+                                )
                               : (instance.statusStr!.contains('Synced')
-                                  ? LuciStatusColors.successText(context)
-                                  : LuciStatusColors.warningText(context)),
+                                    ? LuciStatusColors.successText(context)
+                                    : LuciStatusColors.warningText(context)),
                         ),
                       ),
                     ),

@@ -587,7 +587,9 @@ class AppState extends ChangeNotifier {
     void Function(ChangePasswordStatus status)? onProgress,
   }) async {
     if (_sessionController == null) {
-      return const ChangePasswordResult.failed('Session controller unavailable');
+      return const ChangePasswordResult.failed(
+        'Session controller unavailable',
+      );
     }
     return await _sessionController!.changeRouterPassword(
       currentPassword: currentPassword,
@@ -1400,11 +1402,13 @@ class AppState extends ChangeNotifier {
             _apiService!.callSimple('system', 'info', {}),
           ]);
           final rawNet = results[0][1];
-          final networkData =
-              rawNet is Map ? Map<String, dynamic>.from(rawNet) : null;
+          final networkData = rawNet is Map
+              ? Map<String, dynamic>.from(rawNet)
+              : null;
           final rawSys = results[1][1];
-          final sysInfoData =
-              rawSys is Map ? Map<String, dynamic>.from(rawSys) : null;
+          final sysInfoData = rawSys is Map
+              ? Map<String, dynamic>.from(rawSys)
+              : null;
           if (sysInfoData != null) {
             _dashboardController?.updateSysInfo(sysInfoData);
           }
@@ -1464,8 +1468,9 @@ class AppState extends ChangeNotifier {
 
         if (sysResult is List && sysResult.length > 1 && sysResult[0] == 0) {
           final rawSys = sysResult[1];
-          final sysInfoData =
-              rawSys is Map ? Map<String, dynamic>.from(rawSys) : null;
+          final sysInfoData = rawSys is Map
+              ? Map<String, dynamic>.from(rawSys)
+              : null;
           if (sysInfoData != null) {
             _dashboardController?.updateSysInfo(sysInfoData);
           }
@@ -1491,12 +1496,14 @@ class AppState extends ChangeNotifier {
             netDataResult.length > 1 &&
             netDataResult[0] == 0) {
           final rawNet = netDataResult[1];
-          final networkData =
-              rawNet is Map ? Map<String, dynamic>.from(rawNet) : null;
+          final networkData = rawNet is Map
+              ? Map<String, dynamic>.from(rawNet)
+              : null;
 
           final rawDump = dashboardData?['interfaceDump'];
-          final interfaceDump =
-              rawDump is Map ? Map<String, dynamic>.from(rawDump) : null;
+          final interfaceDump = rawDump is Map
+              ? Map<String, dynamic>.from(rawDump)
+              : null;
           final wanDeviceNames =
               ThroughputController.resolveThroughputDeviceNames(interfaceDump);
 
@@ -1755,7 +1762,9 @@ class AppState extends ChangeNotifier {
       for (final rule in overview.customRules) {
         if (!rule.enabled) continue;
         final target = rule.target.toUpperCase();
-        if (target != 'DROP' && target != 'REJECT' && target != 'STOP') continue;
+        if (target != 'DROP' && target != 'REJECT' && target != 'STOP') {
+          continue;
+        }
         for (final m in rule.srcMac) {
           final norm = ClientNamingHelper.normalizeMac(m);
           if (norm.isNotEmpty) {
@@ -2086,8 +2095,7 @@ class AppState extends ChangeNotifier {
     if (dashboardData != null) {
       if (dashboardData!['uciWirelessConfig'] is Map) {
         final uci = dashboardData!['uciWirelessConfig'] as Map;
-        final uciValues =
-            (uci['values'] is Map) ? (uci['values'] as Map) : uci;
+        final uciValues = (uci['values'] is Map) ? (uci['values'] as Map) : uci;
         if (uciValues[radioName] is Map) {
           _safeSetMapEntry(
             uciValues[radioName] as Map,
@@ -2116,8 +2124,7 @@ class AppState extends ChangeNotifier {
     if (dashboardData != null) {
       if (dashboardData!['uciWirelessConfig'] is Map) {
         final uci = dashboardData!['uciWirelessConfig'] as Map;
-        final uciValues =
-            (uci['values'] is Map) ? (uci['values'] as Map) : uci;
+        final uciValues = (uci['values'] is Map) ? (uci['values'] as Map) : uci;
         if (uciValues[ifaceSection] is Map) {
           _safeSetMapEntry(
             uciValues[ifaceSection] as Map,
@@ -2765,11 +2772,13 @@ class AppState extends ChangeNotifier {
   );
 
   Future<void> refreshFirewallState() async {
-    final ip = _routerService?.selectedRouter?.ipAddress ??
+    final ip =
+        _routerService?.selectedRouter?.ipAddress ??
         (reviewerModeEnabled || _apiService is MockApiService
             ? '192.168.1.1'
             : null);
-    final token = _authService?.sysauth ??
+    final token =
+        _authService?.sysauth ??
         (reviewerModeEnabled || _apiService is MockApiService
             ? 'mock_sysauth'
             : null);
@@ -2951,15 +2960,18 @@ class AppState extends ChangeNotifier {
     required NetworkAccessPolicy policy,
     BuildContext? context,
   }) async {
-    final ip = _routerService?.selectedRouter?.ipAddress ??
+    final ip =
+        _routerService?.selectedRouter?.ipAddress ??
         (reviewerModeEnabled || _apiService is MockApiService
             ? '192.168.1.1'
             : null);
-    final token = _authService?.sysauth ??
+    final token =
+        _authService?.sysauth ??
         (reviewerModeEnabled || _apiService is MockApiService
             ? 'mock_sysauth'
             : null);
-    final caps = capabilities ??
+    final caps =
+        capabilities ??
         (reviewerModeEnabled || _apiService is MockApiService
             ? RouterCapabilities.mock()
             : null);
@@ -3069,14 +3081,15 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> checkExpiredDevicePolicies() async {
-    final expiredSchedules =
-        ClientPolicyScheduleService.instance.getExpiredSchedules();
+    final expiredSchedules = ClientPolicyScheduleService.instance
+        .getExpiredSchedules();
     if (expiredSchedules.isEmpty) return;
 
     for (final schedule in expiredSchedules) {
       final normMac = schedule.targetMac;
-      final currentExpiry =
-          ClientPolicyScheduleService.instance.getExpiry(normMac);
+      final currentExpiry = ClientPolicyScheduleService.instance.getExpiry(
+        normMac,
+      );
       if (currentExpiry == null || currentExpiry != schedule.scheduleExpiry) {
         continue;
       }
@@ -3626,10 +3639,9 @@ class AppState extends ChangeNotifier {
   /// as wireless if their MAC appears in any router's associated stations list.
   Future<List<Client>> fetchAggregatedClients({
     void Function(List<Client> clients)? onIncrementalUpdate,
-  }) =>
-      _clientController!.fetchAggregatedClients(
-        onIncrementalUpdate: onIncrementalUpdate,
-      );
+  }) => _clientController!.fetchAggregatedClients(
+    onIncrementalUpdate: onIncrementalUpdate,
+  );
 
   bool get isClientsLoading => _clientController?.isFetchingClients ?? false;
   bool get hasFetchedClients => _clientController?.hasFetchedClients ?? false;

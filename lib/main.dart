@@ -38,10 +38,11 @@ void main() {
   // Register SIL Open Font License (OFL) for bundled Geist and Geist Mono fonts
   LicenseRegistry.addLicense(() async* {
     final license = await rootBundle.loadString('assets/fonts/OFL.txt');
-    yield LicenseEntryWithLineBreaks(
-      ['google_fonts', 'Geist', 'Geist Mono'],
-      license,
-    );
+    yield LicenseEntryWithLineBreaks([
+      'google_fonts',
+      'Geist',
+      'Geist Mono',
+    ], license);
   });
 
   // Register YALA's GPLv3 copyleft license and copyright attributions in Flutter LicenseRegistry

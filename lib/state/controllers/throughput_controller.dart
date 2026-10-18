@@ -190,7 +190,8 @@ class ThroughputController {
 
       if (targetDev == null || targetDev == 'lo' || targetDev.isEmpty) continue;
 
-      final isWan = ifname.startsWith('wan') ||
+      final isWan =
+          ifname.startsWith('wan') ||
           proto == 'pppoe' ||
           interface['is_wan'] == true;
 

@@ -263,7 +263,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     // 1. Pre-fill form fields synchronously from constructor arguments or selectedRouter BEFORE adding listeners
     final rawRouter = ref.read(appStateProvider).selectedRouter;
-    final isMock = RouterService.isMockRouter(rawRouter) ||
+    final isMock =
+        RouterService.isMockRouter(rawRouter) ||
         ref.read(appStateProvider).reviewerModeEnabled;
     final currentRouter = isMock ? null : rawRouter;
     _selectedProfileId = currentRouter?.id;
@@ -300,9 +301,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           .trim();
       final allRouters = ref.read(appStateProvider).routers;
       final match = allRouters
-          .where((r) =>
-              !RouterService.isMockRouter(r) &&
-              (r.ipAddress == ip || r.ipAddress == cleanIp))
+          .where(
+            (r) =>
+                !RouterService.isMockRouter(r) &&
+                (r.ipAddress == ip || r.ipAddress == cleanIp),
+          )
           .firstOrNull;
       if (match != null) {
         _selectedProfileId = match.id;
@@ -373,9 +376,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     await appState.loadRouters();
     if (!mounted) return;
     final activeRouter =
-        appState.selectedRouter != null && !RouterService.isMockRouter(appState.selectedRouter)
-            ? appState.selectedRouter
-            : appState.routers.where((r) => !RouterService.isMockRouter(r)).firstOrNull;
+        appState.selectedRouter != null &&
+            !RouterService.isMockRouter(appState.selectedRouter)
+        ? appState.selectedRouter
+        : appState.routers
+              .where((r) => !RouterService.isMockRouter(r))
+              .firstOrNull;
     if (activeRouter != null) {
       _selectProfile(activeRouter);
     } else {
@@ -396,9 +402,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           .replaceAll('/', '')
           .trim();
       final matchingRouter = appState.routers
-          .where((r) =>
-              !RouterService.isMockRouter(r) &&
-              (r.ipAddress == input || r.ipAddress == cleanInput))
+          .where(
+            (r) =>
+                !RouterService.isMockRouter(r) &&
+                (r.ipAddress == input || r.ipAddress == cleanInput),
+          )
           .firstOrNull;
       if (matchingRouter != null) {
         if (_selectedProfileId != matchingRouter.id) {

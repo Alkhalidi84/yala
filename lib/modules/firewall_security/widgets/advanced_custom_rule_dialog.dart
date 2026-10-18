@@ -69,8 +69,9 @@ class _AdvancedCustomRuleDialogState
     final init = widget.initialRule;
     _nameController = TextEditingController(text: init?.name ?? '');
     _srcIpController = TextEditingController(text: init?.srcIp ?? '');
-    _srcMacController =
-        TextEditingController(text: init?.srcMac.join(', ') ?? '');
+    _srcMacController = TextEditingController(
+      text: init?.srcMac.join(', ') ?? '',
+    );
     _destIpController = TextEditingController(text: init?.destIp ?? '');
     _destPortController = TextEditingController(text: init?.destPort ?? '');
 
@@ -174,7 +175,8 @@ class _AdvancedCustomRuleDialogState
     final canModify = appState.capabilities?.canModifyFirewall ?? true;
     if (!canModify) {
       setState(() {
-        _validationError = loc?.firewallReadOnlyNotice ??
+        _validationError =
+            loc?.firewallReadOnlyNotice ??
             'Read-only access: Changes cannot be applied on this router account.';
       });
       return;
@@ -195,7 +197,8 @@ class _AdvancedCustomRuleDialogState
       srcIp: srcIp,
       destPort: destPort,
       proto: _proto,
-      routerId: appState.selectedRouter?.id ?? appState.selectedRouter?.ipAddress,
+      routerId:
+          appState.selectedRouter?.id ?? appState.selectedRouter?.ipAddress,
     );
     if (isLockoutRisk) {
       setState(() {
@@ -619,7 +622,9 @@ class _AdvancedCustomRuleDialogState
                 // Enabled Switch
                 SwitchListTile.adaptive(
                   title: const Text('Rule Enabled'),
-                  subtitle: const Text('Activate this security rule immediately'),
+                  subtitle: const Text(
+                    'Activate this security rule immediately',
+                  ),
                   value: _enabled,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (val) => setState(() => _enabled = val),

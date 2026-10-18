@@ -396,18 +396,14 @@ class _FirewallSecurityScreenState
                     ),
                     const SizedBox(height: 16),
                     LuciCollapsibleCard(
-                      title:
-                          l10n?.portForwardsTitle ??
-                          'Port Forwards',
+                      title: l10n?.portForwardsTitle ?? 'Port Forwards',
                       count: overview.portForwards.length,
                       subtitle:
                           '${overview.portForwards.length} port forward rules',
                       icon: Icons.import_export_outlined,
                       iconColor: Colors.orange,
-                      childBuilder: (ctx) => _buildPortForwardingsList(
-                        context,
-                        overview,
-                      ),
+                      childBuilder: (ctx) =>
+                          _buildPortForwardingsList(context, overview),
                     ),
                     const SizedBox(height: 16),
                     LuciCollapsibleCard(
@@ -549,8 +545,9 @@ class _FirewallSecurityScreenState
                     l10n?.firewallShieldActiveSubtitle ??
                         'Defending your home network against unauthorized incoming traffic.',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.75,
+                      ),
                     ),
                   ),
                 ],
@@ -583,8 +580,9 @@ class _FirewallSecurityScreenState
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
-                    color: theme.colorScheme.outlineVariant
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.5,
+                    ),
                   ),
                 ),
                 child: InkWell(
@@ -619,8 +617,9 @@ class _FirewallSecurityScreenState
                           l10n?.firewallOpenPortSubtitle ??
                               'Allow external devices to reach an app on your network.',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.7),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -638,8 +637,9 @@ class _FirewallSecurityScreenState
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
-                    color: theme.colorScheme.outlineVariant
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.5,
+                    ),
                   ),
                 ),
                 child: InkWell(
@@ -675,8 +675,9 @@ class _FirewallSecurityScreenState
                           l10n?.firewallBlockIncomingSubtitle ??
                               'Prevent an external address or connection from reaching your network.',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.7),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -1081,10 +1082,8 @@ class _FirewallSecurityScreenState
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.add),
                 label: const Text('Add Port Forward'),
-                onPressed: () => AdvancedPortForwardDialog.show(
-                  context,
-                  overview: overview,
-                ),
+                onPressed: () =>
+                    AdvancedPortForwardDialog.show(context, overview: overview),
               ),
             ),
           ),
@@ -1101,9 +1100,9 @@ class _FirewallSecurityScreenState
         else
           ...pfs.map((pf) {
             final matchedClient = clients.cast<Client?>().firstWhere(
-                  (c) => c != null && c.ipAddress.trim() == pf.destIp.trim(),
-                  orElse: () => null,
-                );
+              (c) => c != null && c.ipAddress.trim() == pf.destIp.trim(),
+              orElse: () => null,
+            );
             final deviceName = matchedClient != null
                 ? ClientNamingHelper.getDisplayName(
                     matchedClient.macAddress,
@@ -1157,10 +1156,10 @@ class _FirewallSecurityScreenState
                     : null,
                 onTap: canModify
                     ? () => AdvancedPortForwardDialog.show(
-                          context,
-                          initialPortForward: pf,
-                          overview: overview,
-                        )
+                        context,
+                        initialPortForward: pf,
+                        overview: overview,
+                      )
                     : null,
               ),
             );
@@ -1169,9 +1168,7 @@ class _FirewallSecurityScreenState
     );
   }
 
-  Future<void> _confirmDeletePortForward(
-    FirewallPortForwarding pf,
-  ) async {
+  Future<void> _confirmDeletePortForward(FirewallPortForwarding pf) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1226,10 +1223,8 @@ class _FirewallSecurityScreenState
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.add_moderator_outlined),
                 label: const Text('Add Security Rule'),
-                onPressed: () => AdvancedCustomRuleDialog.show(
-                  context,
-                  overview: overview,
-                ),
+                onPressed: () =>
+                    AdvancedCustomRuleDialog.show(context, overview: overview),
               ),
             ),
           ),
@@ -1268,8 +1263,7 @@ class _FirewallSecurityScreenState
   }) {
     final theme = Theme.of(context);
     final isStaged = _stagedCustomRuleStates.containsKey(r.sectionKey);
-    final currentEnabled =
-        _stagedCustomRuleStates[r.sectionKey] ?? r.enabled;
+    final currentEnabled = _stagedCustomRuleStates[r.sectionKey] ?? r.enabled;
     final policyColor = _getPolicyColor(r.target);
 
     final trafficDetails = <String>[];
@@ -1290,10 +1284,7 @@ class _FirewallSecurityScreenState
 
     Widget buildTargetBadge() {
       return Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 3,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: policyColor.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(6),
@@ -1329,17 +1320,11 @@ class _FirewallSecurityScreenState
 
     Widget buildStagedBadge() {
       return Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 6,
-          vertical: 1,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         decoration: BoxDecoration(
           color: Colors.amber.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: Colors.amber.shade700,
-            width: 0.8,
-          ),
+          border: Border.all(color: Colors.amber.shade700, width: 0.8),
         ),
         child: Text(
           'STAGED',
@@ -1406,9 +1391,7 @@ class _FirewallSecurityScreenState
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Container(
         decoration: BoxDecoration(
           color: isStaged
@@ -1423,13 +1406,16 @@ class _FirewallSecurityScreenState
           borderRadius: BorderRadius.circular(14),
           onTap: canModify
               ? () => AdvancedCustomRuleDialog.show(
-                    context,
-                    initialRule: r,
-                    overview: overview,
-                  )
+                  context,
+                  initialRule: r,
+                  overview: overview,
+                )
               : null,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14.0,
+              vertical: 12.0,
+            ),
             child: LayoutBuilder(
               builder: (ctx, constraints) {
                 final isWide = constraints.maxWidth >= 540;
@@ -1559,7 +1545,11 @@ class _FirewallSecurityScreenState
                       ],
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(left: 30, top: 4, bottom: 6),
+                      padding: const EdgeInsets.only(
+                        left: 30,
+                        top: 4,
+                        bottom: 6,
+                      ),
                       child: Text(
                         subtitleText,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -1672,9 +1662,7 @@ class _FirewallSecurityScreenState
     }
   }
 
-  Future<void> _confirmDeleteCustomRule(
-    FirewallCustomRule r,
-  ) async {
+  Future<void> _confirmDeleteCustomRule(FirewallCustomRule r) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

@@ -19,7 +19,10 @@ import 'package:yet_another_luci_app/utils/self_device_guard.dart';
 
 void main() {
   setUp(() {
-    SelfDeviceGuard.setMockLocalAddresses({'192.168.1.50', '00:11:22:33:44:55'});
+    SelfDeviceGuard.setMockLocalAddresses({
+      '192.168.1.50',
+      '00:11:22:33:44:55',
+    });
   });
 
   tearDown(() {

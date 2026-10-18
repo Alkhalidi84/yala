@@ -45,21 +45,21 @@ class ChangePasswordResult {
   final bool isSuccess;
 
   const ChangePasswordResult.success()
-      : status = ChangePasswordStatus.success,
-        errorMessage = null,
-        isSuccess = true;
+    : status = ChangePasswordStatus.success,
+      errorMessage = null,
+      isSuccess = true;
 
   const ChangePasswordResult.storageWarning(this.errorMessage)
-      : status = ChangePasswordStatus.storageWarning,
-        isSuccess = true;
+    : status = ChangePasswordStatus.storageWarning,
+      isSuccess = true;
 
   const ChangePasswordResult.ambiguous(this.errorMessage)
-      : status = ChangePasswordStatus.ambiguous,
-        isSuccess = false;
+    : status = ChangePasswordStatus.ambiguous,
+      isSuccess = false;
 
   const ChangePasswordResult.failed(this.errorMessage)
-      : status = ChangePasswordStatus.failed,
-        isSuccess = false;
+    : status = ChangePasswordStatus.failed,
+      isSuccess = false;
 }
 
 /// Encapsulates authentication session lifecycle, router profile selection,
@@ -93,7 +93,8 @@ class SessionController {
        _themePalette = initialThemePalette,
        _locale = initialLocale,
        _clientsAggregateAllRouters = initialClientsAggregateAllRouters,
-       _dashboardPreferences = initialDashboardPreferences ?? DashboardPreferences(),
+       _dashboardPreferences =
+           initialDashboardPreferences ?? DashboardPreferences(),
        _apiServiceRef = apiServiceRef,
        _authServiceRef = authServiceRef,
        _routerServiceRef = routerServiceRef,
@@ -887,9 +888,7 @@ class SessionController {
     }
 
     if (newPassword.isEmpty) {
-      return const ChangePasswordResult.failed(
-        'New password cannot be empty',
-      );
+      return const ChangePasswordResult.failed('New password cannot be empty');
     }
 
     if (newPassword == currentPassword) {
@@ -998,9 +997,8 @@ class SessionController {
               object: 'system',
               method: 'board',
             );
-            boardVerified = (boardRes is List &&
-                    boardRes.isNotEmpty &&
-                    boardRes[0] == 0) ||
+            boardVerified =
+                (boardRes is List && boardRes.isNotEmpty && boardRes[0] == 0) ||
                 (boardRes is Map && boardRes['result'] != null);
           } catch (_) {
             boardVerified = false;

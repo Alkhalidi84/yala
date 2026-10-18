@@ -310,7 +310,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       IconButton(
                         icon: const Icon(Icons.edit_outlined, size: 16),
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                        constraints: const BoxConstraints(
+                          minWidth: 26,
+                          minHeight: 26,
+                        ),
                         visualDensity: VisualDensity.compact,
                         tooltip: l10n?.tooltipEditHostname ?? 'Edit hostname',
                         onPressed: () => EditHostnameDialog.show(
@@ -981,7 +984,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           fontSize: 15,
                           color: isSupported
                               ? colorScheme.onSurface
-                              : colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                              : colorScheme.onSurfaceVariant.withValues(
+                                  alpha: 0.6,
+                                ),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -989,7 +994,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         isSupported
                             ? 'Update root/admin password on active router'
                             : (l10n?.changePasswordUnsupported ??
-                                'Router does not expose luci.setPassword via rpcd-mod-luci.'),
+                                  'Router does not expose luci.setPassword via rpcd-mod-luci.'),
                         style: TextStyle(
                           fontSize: 12,
                           color: colorScheme.onSurfaceVariant,

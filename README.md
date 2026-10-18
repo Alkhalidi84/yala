@@ -4,12 +4,12 @@
   <img src="assets/images/app_logo_transparent.png" width="120" alt="App Logo" />
   <h2>Modern OpenWrt & LuCI Router Manager</h2>
 
-  [![Version](https://img.shields.io/badge/Version-v2.5.0-blue.svg?style=for-the-badge&logo=github)](https://github.com/nightcodex7/yala/releases)
+  [![Version](https://img.shields.io/github/v/release/nightcodex7/yala?style=for-the-badge&logo=github&color=blue&label=Version)](https://github.com/nightcodex7/yala/releases/latest)
   [![Downloads](https://img.shields.io/github/downloads/nightcodex7/yala/total.svg?style=for-the-badge&logo=github&color=blue)](https://github.com/nightcodex7/yala/releases)
-  [![Page Views](https://komarev.com/ghpvc/?username=nightcodex7-yala&label=Page%20Views&color=0175C2&style=for-the-badge)](https://github.com/nightcodex7/yala)
-  [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20(Beta)-3DDC84?style=for-the-badge&logo=android&logoColor=white)]()
+  [![Page Views](https://api.visitorbadge.io/api/visitors?path=nightcodex7%2Fyala&label=Page%20Views&style=for-the-badge&labelColor=555555&countColor=0175C2)](https://github.com/nightcodex7/yala)
+  [![Platform Android](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://play.google.com/store/apps/details?id=com.nightcode.luci)
+  [![Platform iOS](https://img.shields.io/badge/Platform-iOS_(Beta)-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/nightcodex7/yala/releases)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](LICENSE)
-  [![Build Status](https://img.shields.io/badge/Build-Passing-teal.svg?style=for-the-badge)]()
   [![OpenWrt](https://img.shields.io/badge/OpenWrt-19.07--25.x-1589F0?style=for-the-badge&logo=openwrt&logoColor=white)](https://openwrt.org)
 
   <br>

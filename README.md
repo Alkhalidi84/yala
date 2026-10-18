@@ -58,10 +58,6 @@ YALA is purpose-built for mobile, tablet, and touch-first form factors:
 - **Chromebooks:** Supported through the ChromeOS Android runtime.
 - **Android XR:** Spatial Android XR support.
 
-> [!TIP]
-> **iOS Beta Availability:**  
-> An experimental iOS Beta `.ipa` build is available for sideloading on [GitHub Releases](https://github.com/nightcodex7/yala/releases/tag/v2.1.0-beta-ipa).
-
 > [!NOTE]
 > **Platform Scope:** YALA is tailored specifically for phone, tablet, and handheld interfaces. Desktop and laptop operating systems (native Windows, macOS, or desktop Linux) are outside the scope of this project, except for Chromebooks running Android apps.
 

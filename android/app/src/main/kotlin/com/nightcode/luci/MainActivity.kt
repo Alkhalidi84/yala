@@ -8,7 +8,6 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -23,9 +22,6 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Native edge-to-edge window setup without pulling in deprecated AndroidX EdgeToEdgeApi classes
-        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Unlock high refresh rate (90Hz/120Hz/144Hz) for ultra-smooth 120fps scrolling
         unlockHighRefreshRate()

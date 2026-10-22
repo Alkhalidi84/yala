@@ -175,8 +175,19 @@ class RealApiService implements IApiService {
 
         final token = _extractAuthToken(response);
         if (token != null) {
-          Logger.info('Step 1 (ubus JSON-RPC $endpoint) succeeded');
-          return AuthResult.success(token, actualUseHttps: useHttps);
+          // Verify the candidate session against system.board before accepting it.
+          // This prevents returning a token that was extracted but is not valid
+          // for authenticated ubus calls on the router.
+          final isVerified = await verifyToken(token, useHttps);
+          if (isVerified) {
+            Logger.info(
+              'Step 1 (ubus JSON-RPC $endpoint) succeeded and verified',
+            );
+            return AuthResult.success(token, actualUseHttps: useHttps);
+          }
+          Logger.warning(
+            'Step 1 (ubus JSON-RPC $endpoint) returned an unverified token',
+          );
         }
 
         if (response.data is Map) {

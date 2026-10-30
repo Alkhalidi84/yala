@@ -129,7 +129,12 @@ class RealApiService implements IApiService {
           context: context,
           allowSessionRenewal: false,
         );
-        return res != null;
+        // ubus returns [6] for an invalid/expired session; a non-null
+        // response alone is not proof that the token is authenticated.
+        return res is List &&
+            res.length > 1 &&
+            res[0] == 0 &&
+            res[1] != null;
       } catch (e) {
         return false;
       }
@@ -604,6 +609,14 @@ class RealApiService implements IApiService {
             }
           }
 
+          // Do not return ubus status [6] as if it were a successful RPC
+          // response. Callers could otherwise treat an expired session as live.
+          if (isAuthError) {
+            throw Exception(
+              'RPC authentication rejected the session for $object.$method',
+            );
+          }
+
           if (decoded is Map && decoded['error'] != null) {
             throw Exception('RPC error: ${decoded['error']['message']}');
           }
@@ -637,6 +650,7 @@ class RealApiService implements IApiService {
                 params: params,
                 context: context,
                 isRetry: true,
+                allowSessionRenewal: allowSessionRenewal,
               );
             }
           } catch (reauthErr) {

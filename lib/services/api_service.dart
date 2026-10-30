@@ -54,6 +54,35 @@ typedef ApiService = RealApiService;
 class RealApiService implements IApiService {
   final HttpClientManager _httpClientManager = HttpClientManager();
 
+  @visibleForTesting
+  static const Map<String, dynamic> sessionAccessProbeParams = {
+    'scope': 'ubus',
+    'object': 'session',
+    'function': 'access',
+  };
+
+  @visibleForTesting
+  static bool isSuccessfulUbusResult(dynamic result) {
+    return result is List && result.isNotEmpty && result[0] == 0;
+  }
+
+  @visibleForTesting
+  static bool isUbusAccessDeniedResponse(dynamic decoded) {
+    if (decoded is! Map) return false;
+
+    final error = decoded['error'];
+    if (error is Map) {
+      final code = error['code'];
+      final message = error['message']?.toString().toLowerCase() ?? '';
+      if (code == -32002 || code == 6 || message.contains('access denied')) {
+        return true;
+      }
+    }
+
+    final result = decoded['result'];
+    return result is List && result.isNotEmpty && result[0] == 6;
+  }
+
   /// Callback to transparently renew expired sessions without UI disruption.
   Future<String?> Function(String ipAddress, bool useHttps)? onSessionRenew;
   Future<String?>? _activeRenewalFuture;
@@ -71,6 +100,33 @@ class RealApiService implements IApiService {
     return future.whenComplete(() {
       _activeRenewalFuture = null;
     });
+  }
+
+  /// Checks whether the current ubus token is still accepted independently
+  /// of the requested object's ACL. A status 6 from an optional RPC can mean
+  /// either an expired session or simply a permission denied for that method.
+  Future<bool> _isSessionValid(
+    String ipAddress,
+    String sysauth,
+    bool useHttps, {
+    BuildContext? context,
+  }) async {
+    try {
+      final result = await callWithContext(
+        ipAddress,
+        sysauth,
+        useHttps,
+        object: 'session',
+        method: 'access',
+        params: sessionAccessProbeParams,
+        context: context,
+        allowSessionRenewal: false,
+      );
+      return isSuccessfulUbusResult(result);
+    } catch (e) {
+      Logger.info('ubus session.access validation failed: $e');
+      return false;
+    }
   }
 
   /// OpenWrt rpcd `file.exec` accepts `params` on newer builds and `args` on older ones.
@@ -117,18 +173,21 @@ class RealApiService implements IApiService {
     bool targetIsHttps = false;
     bool invalidCredentialsDetected = false;
 
-    // Helper to verify candidate token against router system.board
+    // Validate the token using the session API itself, not system.board:
+    // a valid LuCI user may have permission to access sessions but not board data.
     Future<bool> verifyToken(String candidateToken, bool protocolHttps) async {
       try {
-        final res = await callWithContext(
+        final result = await callWithContext(
           ipAddress,
           candidateToken,
           protocolHttps,
-          object: 'system',
-          method: 'board',
+          object: 'session',
+          method: 'access',
+          params: sessionAccessProbeParams,
           context: context,
+          allowSessionRenewal: false,
         );
-        return res != null;
+        return isSuccessfulUbusResult(result);
       } catch (e) {
         return false;
       }
@@ -175,8 +234,16 @@ class RealApiService implements IApiService {
 
         final token = _extractAuthToken(response);
         if (token != null) {
-          Logger.info('Step 1 (ubus JSON-RPC $endpoint) succeeded');
-          return AuthResult.success(token, actualUseHttps: useHttps);
+          final isVerified = await verifyToken(token, useHttps);
+          if (isVerified) {
+            Logger.info(
+              'Step 1 (ubus JSON-RPC $endpoint) succeeded and verified',
+            );
+            return AuthResult.success(token, actualUseHttps: useHttps);
+          }
+          Logger.warning(
+            'Step 1 (ubus JSON-RPC $endpoint) returned an unverified session token',
+          );
         }
 
         if (response.data is Map) {
@@ -328,8 +395,16 @@ class RealApiService implements IApiService {
 
         final token = _extractAuthToken(response);
         if (token != null) {
-          Logger.info('Step 4 (Protocol fallback replay) succeeded');
-          return AuthResult.success(token, actualUseHttps: replayUseHttps);
+          final isVerified = await verifyToken(token, replayUseHttps);
+          if (isVerified) {
+            Logger.info(
+              'Step 4 (Protocol fallback replay) succeeded and verified',
+            );
+            return AuthResult.success(token, actualUseHttps: replayUseHttps);
+          }
+          Logger.warning(
+            'Step 4 (Protocol fallback replay) returned an unverified session token',
+          );
         }
       } on DioException catch (e) {
         Logger.info(
@@ -495,6 +570,7 @@ class RealApiService implements IApiService {
     Map<String, dynamic>? params,
     BuildContext? context,
     bool isRetry = false,
+    bool allowSessionRenewal = true,
   }) async {
     final client = _createHttpClient(useHttps, ipAddress, context: context);
     final rpcPayload = {
@@ -533,55 +609,79 @@ class RealApiService implements IApiService {
               ? jsonDecode(response.data as String)
               : response.data;
 
-          bool isAuthError = false;
-          if (decoded is Map && decoded['error'] != null) {
-            final err = decoded['error'];
-            final errCode = err is Map ? err['code'] : null;
-            final errMsg =
-                (err is Map ? err['message'] : err)?.toString().toLowerCase() ??
-                '';
-            if (errCode == -32002 ||
-                errCode == 6 ||
-                errMsg.contains('access denied')) {
-              isAuthError = true;
+          final isAuthError = isUbusAccessDeniedResponse(decoded);
+
+          if (isAuthError &&
+              allowSessionRenewal &&
+              !isRetry &&
+              sysauth.isNotEmpty) {
+            // Do not treat a method-level ACL denial as an expired session.
+            // session.access checks the token independently of the denied RPC.
+            final sessionIsValid = await _isSessionValid(
+              ipAddress,
+              sysauth,
+              useHttps,
+              context: context,
+            );
+            if (sessionIsValid) {
+              Logger.info(
+                'RPC $object.$method denied; ubus session remains valid.',
+              );
+              final deniedResult = decoded is Map ? decoded['result'] : null;
+              if (deniedResult is List && deniedResult.isNotEmpty) {
+                return deniedResult;
+              }
+              return [6];
             }
-          } else if (decoded is Map && decoded['result'] is List) {
-            final resList = decoded['result'] as List;
-            if (resList.isNotEmpty && resList.length == 1 && resList[0] == 6) {
-              isAuthError = true;
+
+            if (onSessionRenew != null) {
+              Logger.info(
+                'Detected an expired ubus session on RPC $object.$method. '
+                'Attempting transparent renewal...',
+              );
+              try {
+                final newToken = await _performSessionRenewal(
+                  ipAddress,
+                  useHttps,
+                );
+                if (newToken != null && newToken.isNotEmpty) {
+                  Logger.info(
+                    'Transparent session renewal succeeded. Retrying RPC $object.$method...',
+                  );
+                  return await callWithContext(
+                    ipAddress,
+                    newToken,
+                    useHttps,
+                    object: object,
+                    method: method,
+                    params: params,
+                    context: context,
+                    isRetry: true,
+                    allowSessionRenewal: allowSessionRenewal,
+                  );
+                }
+              } catch (reauthErr) {
+                Logger.warning(
+                  'Transparent session renewal failed: $reauthErr',
+                );
+              }
             }
           }
 
-          if (isAuthError &&
-              !isRetry &&
-              onSessionRenew != null &&
-              sysauth.isNotEmpty) {
-            Logger.info(
-              'Detected expired session on RPC $object.$method. Attempting transparent renewal...',
-            );
-            try {
-              final newToken = await _performSessionRenewal(
-                ipAddress,
-                useHttps,
+          if (isAuthError) {
+            if (allowSessionRenewal && sysauth.isNotEmpty) {
+              throw Exception(
+                'Session expired: ubus rejected the session for $object.$method',
               );
-              if (newToken != null && newToken.isNotEmpty) {
-                Logger.info(
-                  'Transparent session renewal succeeded. Retrying RPC $object.$method...',
-                );
-                return await callWithContext(
-                  ipAddress,
-                  newToken,
-                  useHttps,
-                  object: object,
-                  method: method,
-                  params: params,
-                  context: context,
-                  isRetry: true,
-                );
-              }
-            } catch (reauthErr) {
-              Logger.warning('Transparent session renewal failed: $reauthErr');
             }
+
+            // During an explicit session check (renewal disabled), preserve the
+            // ubus denial result so the caller can classify the token as invalid.
+            final deniedResult = decoded is Map ? decoded['result'] : null;
+            if (deniedResult is List && deniedResult.isNotEmpty) {
+              return deniedResult;
+            }
+            return [6];
           }
 
           if (decoded is Map && decoded['error'] != null) {
@@ -595,6 +695,7 @@ class RealApiService implements IApiService {
             return [0, result];
           }
         } else if ((response.statusCode == 401 || response.statusCode == 403) &&
+            allowSessionRenewal &&
             !isRetry &&
             onSessionRenew != null &&
             sysauth.isNotEmpty) {
@@ -616,6 +717,7 @@ class RealApiService implements IApiService {
                 params: params,
                 context: context,
                 isRetry: true,
+                allowSessionRenewal: allowSessionRenewal,
               );
             }
           } catch (reauthErr) {

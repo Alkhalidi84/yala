@@ -11,6 +11,41 @@ void main() {
     apiService = RealApiService();
   });
 
+  group('RealApiService ubus session response handling', () {
+    test('Uses session.access with the required scope and target', () {
+      expect(RealApiService.sessionAccessProbeParams['scope'], 'ubus');
+      expect(RealApiService.sessionAccessProbeParams['object'], 'session');
+      expect(RealApiService.sessionAccessProbeParams['function'], 'access');
+    });
+
+    test('Accepts only successful ubus status responses', () {
+      expect(RealApiService.isSuccessfulUbusResult([0]), isTrue);
+      expect(RealApiService.isSuccessfulUbusResult([6]), isFalse);
+      expect(RealApiService.isSuccessfulUbusResult([1]), isFalse);
+      expect(RealApiService.isSuccessfulUbusResult([]), isFalse);
+      expect(RealApiService.isSuccessfulUbusResult(null), isFalse);
+    });
+
+    test('Recognizes ubus permission-denied result responses', () {
+      expect(
+        RealApiService.isUbusAccessDeniedResponse({'result': [6]}),
+        isTrue,
+      );
+      expect(
+        RealApiService.isUbusAccessDeniedResponse({'result': [0]}),
+        isFalse,
+      );
+    });
+
+    test('Recognizes JSON-RPC access-denied errors', () {
+      final denied = {'error': {'code': 6, 'message': 'Access denied'}};
+      final unrelated = {'error': {'code': -1, 'message': 'Server error'}};
+
+      expect(RealApiService.isUbusAccessDeniedResponse(denied), isTrue);
+      expect(RealApiService.isUbusAccessDeniedResponse(unrelated), isFalse);
+    });
+  });
+
   group('RealApiService fileExec Helpers', () {
     test('fileExecParams generates correct payload structure', () {
       final res = RealApiService.fileExecParams('/bin/sh', ['-c', 'uptime']);

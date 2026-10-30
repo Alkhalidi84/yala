@@ -398,6 +398,7 @@ class _TestableRealApiService extends RealApiService {
     Map<String, dynamic>? params,
     BuildContext? context,
     bool isRetry = false,
+    bool allowSessionRenewal = true,
   }) async {
     return onCall(object, method, params);
   }

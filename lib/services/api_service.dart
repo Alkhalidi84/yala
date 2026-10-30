@@ -72,7 +72,7 @@ class RealApiService implements IApiService {
       _activeRenewalFuture = null;
     });
   }
- 
+
   /// Checks whether the current ubus token is still accepted independently
   /// of the requested object's ACL. A status 6 from an optional RPC can mean
   /// either an expired session or simply a permission denied for that method.
@@ -612,8 +612,7 @@ class RealApiService implements IApiService {
             );
             if (sessionIsValid) {
               Logger.info(
-                'RPC $object.$method was denied, but the ubus session is valid; '
-                'returning the permission result without disconnecting the router.',
+                'RPC $object.$method denied while the ubus session remains valid.',
               );
               final deniedResult = decoded is Map ? decoded['result'] : null;
               if (deniedResult is List && deniedResult.isNotEmpty) {
@@ -649,7 +648,9 @@ class RealApiService implements IApiService {
                   );
                 }
               } catch (reauthErr) {
-                Logger.warning('Transparent session renewal failed: $reauthErr');
+                Logger.warning(
+                  'Transparent session renewal failed: $reauthErr',
+                );
               }
             }
           }

@@ -610,7 +610,7 @@ class RealApiService implements IApiService {
           // response. Callers could otherwise treat an expired session as live.
           if (isAuthError) {
             throw Exception(
-              'RPC authentication rejected the session for $object.$method',
+              'Session expired or access denied: ubus rejected the session for $object.$method',
             );
           }
 

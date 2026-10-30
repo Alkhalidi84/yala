@@ -72,6 +72,32 @@ class RealApiService implements IApiService {
       _activeRenewalFuture = null;
     });
   }
+ 
+  /// Checks whether the current ubus token is still accepted independently
+  /// of the requested object's ACL. A status 6 from an optional RPC can mean
+  /// either an expired session or simply a permission denied for that method.
+  Future<bool> _isSessionValid(
+    String ipAddress,
+    String sysauth,
+    bool useHttps, {
+    BuildContext? context,
+  }) async {
+    try {
+      final result = await callWithContext(
+        ipAddress,
+        sysauth,
+        useHttps,
+        object: 'session',
+        method: 'access',
+        context: context,
+        allowSessionRenewal: false,
+      );
+      return result is List && result.isNotEmpty && result[0] == 0;
+    } catch (e) {
+      Logger.info('ubus session.access validation failed: $e');
+      return false;
+    }
+  }
 
   /// OpenWrt rpcd `file.exec` accepts `params` on newer builds and `args` on older ones.
   ///
@@ -567,52 +593,73 @@ class RealApiService implements IApiService {
             }
           } else if (decoded is Map && decoded['result'] is List) {
             final resList = decoded['result'] as List;
-            if (resList.isNotEmpty && resList.length == 1 && resList[0] == 6) {
+            if (resList.isNotEmpty && resList[0] == 6) {
               isAuthError = true;
             }
           }
 
-          if (isAuthError &&
-              allowSessionRenewal &&
-              !isRetry &&
-              onSessionRenew != null &&
-              sysauth.isNotEmpty) {
-            Logger.info(
-              'Detected expired session on RPC $object.$method. Attempting transparent renewal...',
+          if (isAuthError && allowSessionRenewal && !isRetry && sysauth.isNotEmpty) {
+            // Do not treat a method-level ACL denial as an expired session.
+            // session.access checks the token independently of the denied RPC.
+            final sessionIsValid = await _isSessionValid(
+              ipAddress,
+              sysauth,
+              useHttps,
+              context: context,
             );
-            try {
-              final newToken = await _performSessionRenewal(
-                ipAddress,
-                useHttps,
+            if (sessionIsValid) {
+              Logger.info(
+                'RPC $object.$method was denied, but the ubus session is valid; '
+                'returning the permission result without disconnecting the router.',
               );
-              if (newToken != null && newToken.isNotEmpty) {
-                Logger.info(
-                  'Transparent session renewal succeeded. Retrying RPC $object.$method...',
-                );
-                return await callWithContext(
-                  ipAddress,
-                  newToken,
-                  useHttps,
-                  object: object,
-                  method: method,
-                  params: params,
-                  context: context,
-                  isRetry: true,
-                  allowSessionRenewal: allowSessionRenewal,
-                );
+              final deniedResult =
+                  decoded is Map ? decoded['result'] : null;
+              if (deniedResult is List && deniedResult.isNotEmpty) {
+                return deniedResult;
               }
-            } catch (reauthErr) {
-              Logger.warning('Transparent session renewal failed: $reauthErr');
+              return [6];
+            }
+
+            if (onSessionRenew != null) {
+              Logger.info(
+                'Detected an expired ubus session on RPC $object.$method. '
+                'Attempting transparent renewal...',
+              );
+              try {
+                final newToken = await _performSessionRenewal(
+                  ipAddress,
+                  useHttps,
+                );
+                if (newToken != null && newToken.isNotEmpty) {
+                  Logger.info(
+                    'Transparent session renewal succeeded. Retrying RPC $object.$method...',
+                  );
+                  return await callWithContext(
+                    ipAddress,
+                    newToken,
+                    useHttps,
+                    object: object,
+                    method: method,
+                    params: params,
+                    context: context,
+                    isRetry: true,
+                    allowSessionRenewal: allowSessionRenewal,
+                  );
+                }
+              } catch (reauthErr) {
+                Logger.warning('Transparent session renewal failed: $reauthErr');
+              }
             }
           }
 
-          // Do not return ubus status [6] as if it were a successful RPC
-          // response. Callers could otherwise treat an expired session as live.
+          // Preserve ubus status 6 so optional callers can handle permission
+          // denials without turning a valid router session into "disconnected".
           if (isAuthError) {
-            throw Exception(
-              'Session expired or access denied: ubus rejected the session '
-              'for $object.$method',
-            );
+            final deniedResult = decoded is Map ? decoded['result'] : null;
+            if (deniedResult is List && deniedResult.isNotEmpty) {
+              return deniedResult;
+            }
+            return [6];
           }
 
           if (decoded is Map && decoded['error'] != null) {

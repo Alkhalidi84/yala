@@ -127,6 +127,7 @@ class RealApiService implements IApiService {
           object: 'system',
           method: 'board',
           context: context,
+          allowSessionRenewal: false,
         );
         return res != null;
       } catch (e) {
@@ -175,8 +176,16 @@ class RealApiService implements IApiService {
 
         final token = _extractAuthToken(response);
         if (token != null) {
-          Logger.info('Step 1 (ubus JSON-RPC $endpoint) succeeded');
-          return AuthResult.success(token, actualUseHttps: useHttps);
+          final isVerified = await verifyToken(token, useHttps);
+          if (isVerified) {
+            Logger.info(
+              'Step 1 (ubus JSON-RPC $endpoint) succeeded and verified',
+            );
+            return AuthResult.success(token, actualUseHttps: useHttps);
+          }
+          Logger.warning(
+            'Step 1 (ubus JSON-RPC $endpoint) returned an unverified session token',
+          );
         }
 
         if (response.data is Map) {
@@ -328,8 +337,16 @@ class RealApiService implements IApiService {
 
         final token = _extractAuthToken(response);
         if (token != null) {
-          Logger.info('Step 4 (Protocol fallback replay) succeeded');
-          return AuthResult.success(token, actualUseHttps: replayUseHttps);
+          final isVerified = await verifyToken(token, replayUseHttps);
+          if (isVerified) {
+            Logger.info(
+              'Step 4 (Protocol fallback replay) succeeded and verified',
+            );
+            return AuthResult.success(token, actualUseHttps: replayUseHttps);
+          }
+          Logger.warning(
+            'Step 4 (Protocol fallback replay) returned an unverified session token',
+          );
         }
       } on DioException catch (e) {
         Logger.info(
@@ -495,6 +512,7 @@ class RealApiService implements IApiService {
     Map<String, dynamic>? params,
     BuildContext? context,
     bool isRetry = false,
+    bool allowSessionRenewal = true,
   }) async {
     final client = _createHttpClient(useHttps, ipAddress, context: context);
     final rpcPayload = {
@@ -553,6 +571,7 @@ class RealApiService implements IApiService {
           }
 
           if (isAuthError &&
+              allowSessionRenewal &&
               !isRetry &&
               onSessionRenew != null &&
               sysauth.isNotEmpty) {
@@ -577,6 +596,7 @@ class RealApiService implements IApiService {
                   params: params,
                   context: context,
                   isRetry: true,
+                  allowSessionRenewal: allowSessionRenewal,
                 );
               }
             } catch (reauthErr) {
@@ -595,6 +615,7 @@ class RealApiService implements IApiService {
             return [0, result];
           }
         } else if ((response.statusCode == 401 || response.statusCode == 403) &&
+            allowSessionRenewal &&
             !isRetry &&
             onSessionRenew != null &&
             sysauth.isNotEmpty) {

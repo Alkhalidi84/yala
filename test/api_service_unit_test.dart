@@ -38,18 +38,8 @@ void main() {
     });
 
     test('Recognizes JSON-RPC access-denied errors', () {
-      final denied = {
-        'error': {
-          'code': 6,
-          'message': 'Access denied',
-        },
-      };
-      final unrelated = {
-        'error': {
-          'code': -1,
-          'message': 'Temporary server error',
-        },
-      };
+      final denied = {'error': {'code': 6, 'message': 'Access denied'}};
+      final unrelated = {'error': {'code': -1, 'message': 'Server error'}};
 
       expect(RealApiService.isUbusAccessDeniedResponse(denied), isTrue);
       expect(RealApiService.isUbusAccessDeniedResponse(unrelated), isFalse);

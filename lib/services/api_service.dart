@@ -131,10 +131,7 @@ class RealApiService implements IApiService {
         );
         // ubus returns [6] for an invalid/expired session; a non-null
         // response alone is not proof that the token is authenticated.
-        return res is List &&
-            res.length > 1 &&
-            res[0] == 0 &&
-            res[1] != null;
+        return res is List && res.length > 1 && res[0] == 0 && res[1] != null;
       } catch (e) {
         return false;
       }

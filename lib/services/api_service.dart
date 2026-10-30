@@ -615,9 +615,7 @@ class RealApiService implements IApiService {
                 'RPC $object.$method was denied, but the ubus session is valid; '
                 'returning the permission result without disconnecting the router.',
               );
-              final deniedResult = decoded is Map
-                  ? decoded['result']
-                  : null;
+              final deniedResult = decoded is Map ? decoded['result'] : null;
               if (deniedResult is List && deniedResult.isNotEmpty) {
                 return deniedResult;
               }

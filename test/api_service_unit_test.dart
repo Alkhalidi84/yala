@@ -12,6 +12,17 @@ void main() {
   });
 
   group('RealApiService ubus session response handling', () {
+    test('Uses session.access to validate the current ubus session', () {
+      expect(
+        RealApiService.sessionAccessProbeParams,
+        equals({
+          'scope': 'ubus',
+          'object': 'session',
+          'function': 'access',
+        }),
+      );
+    });
+
     test('Accepts a successful session.access response', () {
       expect(
         RealApiService.isSuccessfulUbusResult([

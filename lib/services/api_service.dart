@@ -55,6 +55,13 @@ class RealApiService implements IApiService {
   final HttpClientManager _httpClientManager = HttpClientManager();
 
   @visibleForTesting
+  static const Map<String, dynamic> sessionAccessProbeParams = {
+    'scope': 'ubus',
+    'object': 'session',
+    'function': 'access',
+  };
+
+  @visibleForTesting
   static bool isSuccessfulUbusResult(dynamic result) {
     return result is List && result.isNotEmpty && result[0] == 0;
   }
@@ -111,6 +118,7 @@ class RealApiService implements IApiService {
         useHttps,
         object: 'session',
         method: 'access',
+        params: sessionAccessProbeParams,
         context: context,
         allowSessionRenewal: false,
       );
@@ -175,6 +183,7 @@ class RealApiService implements IApiService {
           protocolHttps,
           object: 'session',
           method: 'access',
+          params: sessionAccessProbeParams,
           context: context,
           allowSessionRenewal: false,
         );

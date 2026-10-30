@@ -54,6 +54,28 @@ typedef ApiService = RealApiService;
 class RealApiService implements IApiService {
   final HttpClientManager _httpClientManager = HttpClientManager();
 
+  @visibleForTesting
+  static bool isSuccessfulUbusResult(dynamic result) {
+    return result is List && result.isNotEmpty && result[0] == 0;
+  }
+
+  @visibleForTesting
+  static bool isUbusAccessDeniedResponse(dynamic decoded) {
+    if (decoded is! Map) return false;
+
+    final error = decoded['error'];
+    if (error is Map) {
+      final code = error['code'];
+      final message = error['message']?.toString().toLowerCase() ?? '';
+      if (code == -32002 || code == 6 || message.contains('access denied')) {
+        return true;
+      }
+    }
+
+    final result = decoded['result'];
+    return result is List && result.isNotEmpty && result[0] == 6;
+  }
+
   /// Callback to transparently renew expired sessions without UI disruption.
   Future<String?> Function(String ipAddress, bool useHttps)? onSessionRenew;
   Future<String?>? _activeRenewalFuture;
@@ -92,7 +114,7 @@ class RealApiService implements IApiService {
         context: context,
         allowSessionRenewal: false,
       );
-      return result is List && result.isNotEmpty && result[0] == 0;
+      return isSuccessfulUbusResult(result);
     } catch (e) {
       Logger.info('ubus session.access validation failed: $e');
       return false;
@@ -143,21 +165,20 @@ class RealApiService implements IApiService {
     bool targetIsHttps = false;
     bool invalidCredentialsDetected = false;
 
-    // Helper to verify candidate token against router system.board
+    // Validate the token using the session API itself, not system.board:
+    // a valid LuCI user may have permission to access sessions but not board data.
     Future<bool> verifyToken(String candidateToken, bool protocolHttps) async {
       try {
-        final res = await callWithContext(
+        final result = await callWithContext(
           ipAddress,
           candidateToken,
           protocolHttps,
-          object: 'system',
-          method: 'board',
+          object: 'session',
+          method: 'access',
           context: context,
           allowSessionRenewal: false,
         );
-        // ubus returns [6] for an invalid/expired session; a non-null
-        // response alone is not proof that the token is authenticated.
-        return res is List && res.length > 1 && res[0] == 0 && res[1] != null;
+        return isSuccessfulUbusResult(result);
       } catch (e) {
         return false;
       }
@@ -579,24 +600,7 @@ class RealApiService implements IApiService {
               ? jsonDecode(response.data as String)
               : response.data;
 
-          bool isAuthError = false;
-          if (decoded is Map && decoded['error'] != null) {
-            final err = decoded['error'];
-            final errCode = err is Map ? err['code'] : null;
-            final errMsg =
-                (err is Map ? err['message'] : err)?.toString().toLowerCase() ??
-                '';
-            if (errCode == -32002 ||
-                errCode == 6 ||
-                errMsg.contains('access denied')) {
-              isAuthError = true;
-            }
-          } else if (decoded is Map && decoded['result'] is List) {
-            final resList = decoded['result'] as List;
-            if (resList.isNotEmpty && resList[0] == 6) {
-              isAuthError = true;
-            }
-          }
+          final isAuthError = isUbusAccessDeniedResponse(decoded);
 
           if (isAuthError &&
               allowSessionRenewal &&
@@ -655,9 +659,15 @@ class RealApiService implements IApiService {
             }
           }
 
-          // Preserve ubus status 6 so optional callers can handle permission
-          // denials without turning a valid router session into "disconnected".
           if (isAuthError) {
+            if (allowSessionRenewal && sysauth.isNotEmpty) {
+              throw Exception(
+                'Session expired: ubus rejected the session for $object.$method',
+              );
+            }
+
+            // During an explicit session check (renewal disabled), preserve the
+            // ubus denial result so the caller can classify the token as invalid.
             final deniedResult = decoded is Map ? decoded['result'] : null;
             if (deniedResult is List && deniedResult.isNotEmpty) {
               return deniedResult;

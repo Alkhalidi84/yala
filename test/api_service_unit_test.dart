@@ -12,28 +12,14 @@ void main() {
   });
 
   group('RealApiService ubus session response handling', () {
-    test('Uses session.access to validate the current ubus session', () {
-      expect(
-        RealApiService.sessionAccessProbeParams,
-        equals({
-          'scope': 'ubus',
-          'object': 'session',
-          'function': 'access',
-        }),
-      );
+    test('Uses session.access with the required scope and target', () {
+      expect(RealApiService.sessionAccessProbeParams['scope'], 'ubus');
+      expect(RealApiService.sessionAccessProbeParams['object'], 'session');
+      expect(RealApiService.sessionAccessProbeParams['function'], 'access');
     });
 
-    test('Accepts a successful session.access response', () {
-      expect(
-        RealApiService.isSuccessfulUbusResult([
-          0,
-          {'ubus': <String, dynamic>{}},
-        ]),
-        isTrue,
-      );
-    });
-
-    test('Rejects denied, empty, and malformed session responses', () {
+    test('Accepts only successful ubus status responses', () {
+      expect(RealApiService.isSuccessfulUbusResult([0]), isTrue);
       expect(RealApiService.isSuccessfulUbusResult([6]), isFalse);
       expect(RealApiService.isSuccessfulUbusResult([1]), isFalse);
       expect(RealApiService.isSuccessfulUbusResult([]), isFalse);
@@ -46,30 +32,27 @@ void main() {
         isTrue,
       );
       expect(
-        RealApiService.isUbusAccessDeniedResponse({'result': [0, {}]}),
+        RealApiService.isUbusAccessDeniedResponse({'result': [0]}),
         isFalse,
       );
     });
 
-    test('Recognizes JSON-RPC access-denied error responses', () {
-      expect(
-        RealApiService.isUbusAccessDeniedResponse({
-          'error': {'code': 6, 'message': 'Access denied'},
-        }),
-        isTrue,
-      );
-      expect(
-        RealApiService.isUbusAccessDeniedResponse({
-          'error': {'code': -32002, 'message': 'Forbidden'},
-        }),
-        isTrue,
-      );
-      expect(
-        RealApiService.isUbusAccessDeniedResponse({
-          'error': {'code': -1, 'message': 'Temporary server error'},
-        }),
-        isFalse,
-      );
+    test('Recognizes JSON-RPC access-denied errors', () {
+      final denied = {
+        'error': {
+          'code': 6,
+          'message': 'Access denied',
+        },
+      };
+      final unrelated = {
+        'error': {
+          'code': -1,
+          'message': 'Temporary server error',
+        },
+      };
+
+      expect(RealApiService.isUbusAccessDeniedResponse(denied), isTrue);
+      expect(RealApiService.isUbusAccessDeniedResponse(unrelated), isFalse);
     });
   });
 

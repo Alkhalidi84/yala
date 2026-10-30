@@ -612,7 +612,7 @@ class RealApiService implements IApiService {
             );
             if (sessionIsValid) {
               Logger.info(
-                'RPC $object.$method denied while the ubus session remains valid.',
+                'RPC $object.$method denied; ubus session remains valid.',
               );
               final deniedResult = decoded is Map ? decoded['result'] : null;
               if (deniedResult is List && deniedResult.isNotEmpty) {

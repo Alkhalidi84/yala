@@ -598,7 +598,10 @@ class RealApiService implements IApiService {
             }
           }
 
-          if (isAuthError && allowSessionRenewal && !isRetry && sysauth.isNotEmpty) {
+          if (isAuthError &&
+              allowSessionRenewal &&
+              !isRetry &&
+              sysauth.isNotEmpty) {
             // Do not treat a method-level ACL denial as an expired session.
             // session.access checks the token independently of the denied RPC.
             final sessionIsValid = await _isSessionValid(
@@ -612,8 +615,9 @@ class RealApiService implements IApiService {
                 'RPC $object.$method was denied, but the ubus session is valid; '
                 'returning the permission result without disconnecting the router.',
               );
-              final deniedResult =
-                  decoded is Map ? decoded['result'] : null;
+              final deniedResult = decoded is Map
+                  ? decoded['result']
+                  : null;
               if (deniedResult is List && deniedResult.isNotEmpty) {
                 return deniedResult;
               }
